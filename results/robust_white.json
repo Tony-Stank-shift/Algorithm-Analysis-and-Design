@@ -1,0 +1,15 @@
+{
+  "n_cases": 500,
+  "monotonicity_violations": 0,
+  "non_tree_edge_violations": 0,
+  "non_tree_edge_cases": 500,
+  "upper_bound_violations": 0,
+  "bound_finite_cases": 398,
+  "bound_trivial_cases": 102,
+  "t_hop_min": 2,
+  "t_hop_median": 4.0,
+  "bound_gap_min": -3.552713678800501e-15,
+  "bound_gap_median": 6.23030481271911,
+  "bound_gap_max": 28.589208845490965,
+  "tolerance": 1e-09
+}

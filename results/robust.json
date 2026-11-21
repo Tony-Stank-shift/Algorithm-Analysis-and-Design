@@ -1,0 +1,36 @@
+{
+  "n_graphs": 30,
+  "noise_rel": 0.2,
+  "drop_ratio": 0.1,
+  "task_sensitivity_noise": 0.058208394500010995,
+  "task_sensitivity_drop": 0.09596770614032894,
+  "arms": [
+    {
+      "arm": "L0_identity",
+      "clean": 5.811807197275698e-07,
+      "noise": 7.009755771688238e-07,
+      "drop": 6.97351391802196e-07,
+      "noise_max": 3.6663609250808804e-06,
+      "drop_max": 2.703839435014288e-06,
+      "degradation_noise": null
+    },
+    {
+      "arm": "L1_trained_minsum",
+      "clean": 0.03482564969057875,
+      "noise": 0.035429746972103174,
+      "drop": 0.03645064342794046,
+      "noise_max": 0.07532028336206054,
+      "drop_max": 0.07854218469847041,
+      "degradation_noise": 0.017346331996437984
+    },
+    {
+      "arm": "L2_mean_gnn",
+      "clean": 22.928528123267544,
+      "noise": 22.82959287259322,
+      "drop": 24.43405244341714,
+      "noise_max": 41.8537973312318,
+      "drop_max": 47.09471482910615,
+      "degradation_noise": -0.004314941200866923
+    }
+  ]
+}

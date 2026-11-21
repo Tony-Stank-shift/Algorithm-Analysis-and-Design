@@ -1,0 +1,116 @@
+[
+  {
+    "L": 1,
+    "same_ball": true,
+    "nodes_g1": [
+      4,
+      5
+    ],
+    "nodes_g2": [
+      4,
+      5
+    ],
+    "pred_g1": 100000.0,
+    "pred_g2": 100000.0,
+    "true_g1": 5.0,
+    "true_g2": 4.0,
+    "err_g1": 99995.0,
+    "err_g2": 99996.0,
+    "identical_pred": true
+  },
+  {
+    "L": 2,
+    "same_ball": true,
+    "nodes_g1": [
+      3,
+      4,
+      5
+    ],
+    "nodes_g2": [
+      3,
+      4,
+      5
+    ],
+    "pred_g1": 100000.0,
+    "pred_g2": 100000.0,
+    "true_g1": 5.0,
+    "true_g2": 4.0,
+    "err_g1": 99995.0,
+    "err_g2": 99996.0,
+    "identical_pred": true
+  },
+  {
+    "L": 3,
+    "same_ball": true,
+    "nodes_g1": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "nodes_g2": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "pred_g1": 100000.0,
+    "pred_g2": 100000.0,
+    "true_g1": 5.0,
+    "true_g2": 4.0,
+    "err_g1": 99995.0,
+    "err_g2": 99996.0,
+    "identical_pred": true
+  },
+  {
+    "L": 4,
+    "same_ball": false,
+    "nodes_g1": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "nodes_g2": [
+      0,
+      2,
+      3,
+      4,
+      5
+    ],
+    "pred_g1": 100000.0,
+    "pred_g2": 4.0,
+    "true_g1": 5.0,
+    "true_g2": 4.0,
+    "err_g1": 99995.0,
+    "err_g2": 0.0,
+    "identical_pred": false
+  },
+  {
+    "L": 5,
+    "same_ball": false,
+    "nodes_g1": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "nodes_g2": [
+      0,
+      2,
+      3,
+      4,
+      5
+    ],
+    "pred_g1": 5.0,
+    "pred_g2": 4.0,
+    "true_g1": 5.0,
+    "true_g2": 4.0,
+    "err_g1": 0.0,
+    "err_g2": 0.0,
+    "identical_pred": false
+  }
+]
