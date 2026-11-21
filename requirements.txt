@@ -1,0 +1,5 @@
+numpy>=2.0
+networkx>=3.4
+matplotlib>=3.9
+# CPU 版即可；GPU 不是必需
+torch>=2.4
