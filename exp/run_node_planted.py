@@ -135,6 +135,9 @@ def main() -> int:
     pct = np.array([r["percentile"] for r in rows])
     fid = np.array([r["fid_plus"] for r in rows])
     eff = dt / np.maximum(dor, 1e-12)
+    # 效率比值只在 oracle Δ 有实际量级时才有意义（分母趋 0 会炸成 ±几十）
+    eff_v = dt[dor > 1e-3] / dor[dor > 1e-3]
+    n_eff = int(len(eff_v))
 
     p_rand = float(wilcoxon(dt, dr).pvalue) if np.any(dt != dr) else 1.0
     p_oracle = float(wilcoxon(dt, dor).pvalue) if np.any(dt != dor) else 1.0
@@ -147,8 +150,7 @@ def main() -> int:
           f"（若为 0，说明这些是**解释器失败**，不是'模型不用结构'）")
     print(f"消融Δ：解释边 {dt.mean():.4f} / oracle {dor.mean():.4f} / 随机 {dr.mean():.4f}")
     print(f"vs 随机：{dt.mean() / max(dr.mean(), 1e-12):.2f}×，Wilcoxon p={p_rand:.2e}")
-    print(f"oracle 效率：中位 {np.median(eff):.3f}（均值 {eff.mean():.3f}；"
-          f"oracle Δ 接近 0 时比值不稳定，看中位）")
+    print(f"oracle 效率：中位 {np.median(eff_v):.3f}（仅 {n_eff}/{len(rows)} 个 oracle Δ>1e-3 的节点）")
     print(f"候选池内百分位：均值 {pct.mean():.3f}（随机 ≈ 0.5）")
     print(f"Fid+ 中位 {np.median(fid):.3f}；存活边 n_kept 中位 {np.median([r['n_kept'] for r in rows]):.0f}")
     print(f"候选池 {min(r['n_cand'] for r in rows)}–{max(r['n_cand'] for r in rows)} 条（中位 "
@@ -168,7 +170,7 @@ def main() -> int:
         "delta_random_mean": float(dr.mean()),
         "ratio_vs_random": float(dt.mean() / max(dr.mean(), 1e-12)),
         "wilcoxon_p_random": p_rand, "wilcoxon_p_oracle": p_oracle,
-        "oracle_efficiency_median": float(np.median(eff)),
+        "oracle_efficiency_median": float(np.median(eff_v)), "n_efficiency": n_eff,
         "percentile_mean": float(pct.mean()),
         "fid_plus_median": float(np.median(fid)),
         "n_kept_median": float(np.median([r["n_kept"] for r in rows])),
@@ -178,7 +180,8 @@ def main() -> int:
         ("GCN test acc ≥ 0.88", acc["test"] >= 0.88, f"{acc['test']:.3f}"),
         ("解释边 vs 随机：Wilcoxon p < 0.05", p_rand < 0.05, f"p={p_rand:.2e}"),
         ("候选池内百分位 > 0.5", pct.mean() > 0.5, f"{pct.mean():.3f}"),
-        ("oracle 效率 ≥ 0.3", np.median(eff) >= 0.3, f"{np.median(eff):.3f}"),
+        ("oracle 效率 ≥ 0.3", np.median(eff_v) >= 0.3 if n_eff else False,
+         f"{np.median(eff_v):.3f}（n={n_eff}）"),
         ("每节点取到的解释边恰为 k 条", all(len(r) > 0 for r in rows), "assert 通过"),
     ]
     ok = True

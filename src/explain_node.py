@@ -96,9 +96,41 @@ def explain_node(model, features: np.ndarray, edges: np.ndarray, node: int,
             "loss_first": float(losses[0])}
 
 
+def global_fidelity(model, features: np.ndarray, edges: np.ndarray, n_nodes: int,
+                    node: int, cls: int, kept: list[int], n_hops: int = 2):
+    """在**全局图**上算保真度：只保留 kept 边，整图重新归一化，跑一次完整前向。
+
+    与 fidelity() 的区别：后者在 2 跳子图上本地重归一化，那个替身会翻类
+    （实测 Cora 上 28% 的节点给的是另一个预测类）。这里不建替身，
+    概率就是模型给的概率，所以数字可以读作"对模型保真"。
+
+    返回 (p_keep, p_full, fid_plus, fid_minus)。
+    """
+    model.eval()
+    X = torch.from_numpy(features.astype(np.float32))
+
+    def probs(keep):
+        idx = np.arange(len(edges)) if keep is None else np.asarray(keep, dtype=int)
+        e = edges[idx]
+        u = torch.from_numpy(np.asarray(e[:, 0], dtype=np.int64))
+        v = torch.from_numpy(np.asarray(e[:, 1], dtype=np.int64))
+        rows = torch.cat([u, v])
+        cols = torch.cat([v, u])
+        A = _norm_from_weights(rows, cols, torch.ones(len(rows)), n_nodes)
+        with torch.no_grad():
+            return F.softmax(model(A, X)[node], dim=0)
+
+    p = float(probs(None)[cls])
+    pk = float(probs(kept)[cls])
+    rest = [e for e in range(len(edges)) if e not in set(kept)]
+    pd = float(probs(rest)[cls])
+    eps = 1e-8
+    return pk, p, 1 - abs(pk - p) / max(p, eps), 1 - abs(pd - p) / max(p, eps)
+
+
 def fidelity(model, features: np.ndarray, edges: np.ndarray,
              node: int, cls: int, kept: list[int], n_hops: int = 2):
-    """只保留 kept 边后，**目标类 cls（全局预测类）**的局部概率变化。
+    """只保留 kept 边后，**目标类 cls** 在 2 跳子图**本地替身**上的概率变化。
 
     返回 (p_keep, p_full, fid_plus, fid_minus)。
     注意：这里的概率是 2 跳子图上本地重归一化的结果，与全局前向不总是同一个

@@ -27,6 +27,13 @@ def dense_from_edges(n: int, edges: np.ndarray) -> np.ndarray:
     return A
 
 
+def edges_from_dense(A: np.ndarray) -> np.ndarray:
+    """从稠密对称邻接恢复无向边表（上三角）。"""
+    iu = np.triu_indices(A.shape[0], k=1)
+    m = A[iu] > 0
+    return np.stack([iu[0][m], iu[1][m]], axis=1).astype(np.int64)
+
+
 def norm_np(A: np.ndarray) -> torch.Tensor:
     return torch.from_numpy(normalized_adj(sp.csr_matrix(A)).toarray())
 

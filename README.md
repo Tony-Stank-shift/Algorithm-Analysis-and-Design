@@ -82,3 +82,41 @@ docs/               STATE.md（进度与已知问题）、DECISIONS.md（22 条�
 ## 课程信息
 
 算法设计与分析（JBK2634001，宋锐），2026 秋 第 9–16 周，2.5 学分。
+
+## 补充实验（B 线）：节点分类 + 可解释性 + 攻击
+
+主报告的结论有个前提：**算法已知**。节点分类没有白盒算法，正好拿来检验"没有白盒时，解释还可不可信"。
+完整内容见 `report/appendixB.tex`（可单独编译：`cd report && tectonic appB-main.tex`）。
+
+### 快速开始
+
+```bash
+python exp/fetch_cora.py              # 下载 8 个 Planetoid 文件到 data/cora/（约 570 KB，不入库）
+python exp/check_cora.py              # 数据体检（形状/划分/同配率）
+python exp/check_node_gnn.py          # GCN 与手算对照 + 三条回归断言
+python exp/run_node_class.py          # 训练 GCN 与 MLP（8 种子）
+python exp/check_node_repro.py        # 同种子跨进程复现 + 与 JSON 对账
+python exp/run_node_planted.py        # SBM 上的解释真值检验（消融）
+python exp/run_node_explain.py        # Cora 上的解释与跨模型稳定性
+python exp/run_node_attack.py         # 随机加边 vs FGA
+python exp/run_node_attack_explain.py # 攻击前后的解释稳定性
+python exp/check_b_negative_controls.py  # 三条负控制
+python exp/plot_b.py                  # 结果图
+```
+
+### 关键数字
+
+| 项 | 结果 |
+|---|---|
+| GCN（公开划分） | **0.8162**（原论文 81.5%） |
+| MLP（无结构对照） | 0.5539 |
+| 随机加边 10% / FGA 10% | −0.017 / **−0.119** |
+| 解释边 vs 随机边（SBM 消融真值） | **14.19×**，Wilcoxon p=6.9e-8 |
+| oracle 效率 | 中位 **0.904** |
+| 解释失败率 | 20%（这些节点删光边后预测也保不住，属解释器失败） |
+
+### 已知限制
+
+- 20% 的节点给不出有序解释（掩码塌成常数）
+- 2 跳子图本地重归一化会翻类（Cora 28%、SBM 20%），所以保真度一律用**全局前向**算
+- 跨模型稳定性 Jaccard 中位 1.000，高得可疑——更像"解释器在挑结构显著的边"，不能读成"证据一致"

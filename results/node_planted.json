@@ -25,6 +25,7 @@
   "wilcoxon_p_random": 6.912159733474255e-08,
   "wilcoxon_p_oracle": 1.1741945398998534e-06,
   "oracle_efficiency_median": 0.9039491586341375,
+  "n_efficiency": 34,
   "percentile_mean": 0.6456500667064938,
   "fid_plus_median": 0.8046912046249818,
   "n_kept_median": 3.0,
