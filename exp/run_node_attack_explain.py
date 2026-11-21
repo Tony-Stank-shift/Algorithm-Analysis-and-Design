@@ -73,43 +73,40 @@ def main() -> int:
         logits2 = model(attack.norm_np(A2), X)
     flipped = int(sum(int(torch.argmax(logits2[n])) != cls[int(n)] for n in nodes))
 
-    # 攻击前解释（用原始边表）
+    # 用梯度显著性（掩码解释器在 Cora 上 0/120 可判定，不能用）
     def explain_all(edges, feats=X_np):
         res = {}
         for n in nodes:
             n = int(n)
-            ex = explain_node.explain_node(model, feats, edges, n, cls[n], K, seed=SEED)
-            if len(ex["cand"]) < 2 * K:
-                continue
-            res[n] = [int(e) for e in ex["cand"][np.argsort(-ex["mask"])[:K]]]
+            sal = explain_node.saliency_explanation(model, feats, edges, d["n"],
+                                                    n, cls[n], K)
+            res[n] = [int(e) for e in sal["edges"]]
         return res
 
     before = explain_all(d["edges"])
     after = explain_all(edges2)
 
     common = sorted(set(before) & set(after))
-    jac, fid_after = [], []
+    jac, ratio_after = [], []
     for n in common:
         a, b = set(before[n]), set(after[n])
         jac.append(len(a & b) / max(len(a | b), 1))
-        _, _, fp, _ = explain_node.global_fidelity(model, X_np, edges2, d["n"], n, cls[n],
-                                                   sorted(b))
-        fid_after.append(fp)
+        pk, p, _suff, _nec = explain_node.global_fidelity(
+            model, X_np, edges2, d["n"], n, cls[n], sorted(b))
+        ratio_after.append(pk / max(p, 1e-8))
     jac = np.array(jac)
-    fid_after = np.array(fid_after)
+    ratio_after = np.array(ratio_after)
 
-    # 对照：随机边集之间的 Jaccard（解释完全无关时的水平）
-    rand_jac = []
-    for n in common[:20]:
-        a = set(rng.choice(len(d["edges"]), size=K, replace=False).tolist())
-        b = set(rng.choice(len(d["edges"]), size=K, replace=False).tolist())
-        rand_jac.append(len(a & b) / max(len(a | b), 1))
+    # 零假设：把解释集跨节点打乱（预算相同、但配错节点）
+    perm_jac = []
+    for i, n in enumerate(common):
+        other = common[(i + 1) % len(common)]
+        a, b = set(before[n]), set(before[other])
+        perm_jac.append(len(a & b) / max(len(a | b), 1))
 
-    print(f"攻击：ε=5%（+{n_add} 边），acc {acc0:.4f} → {acc1:.4f}（↓{acc0 - acc1:.4f}）；"
-          f"{flipped}/{len(nodes)} 个解释节点的预测被翻转")
     print(f"解释 Jaccard：中位 {np.median(jac):.3f}，均值 {jac.mean():.3f}"
-          f"（随机边集对照 {np.mean(rand_jac):.3f}）")
-    print(f"攻击后解释边的全局 Fid+ 中位 {np.median(fid_after):.3f}")
+          f"（跨节点置换零假设 {np.mean(perm_jac):.3f}）")
+    print(f"攻击后只留解释边，目标类概率仍剩 {np.median(ratio_after):.0%}（中位）")
 
     out = ROOT / "results" / "node_attack_explain.json"
     out.parent.mkdir(exist_ok=True)
@@ -118,20 +115,21 @@ def main() -> int:
         "acc_clean": acc0, "acc_attacked": acc1, "drop": acc0 - acc1,
         "flipped": flipped, "n_nodes_flip": len(nodes),
         "jaccard_median": float(np.median(jac)), "jaccard_mean": float(jac.mean()),
-        "jaccard_random": float(np.mean(rand_jac)),
-        "fid_plus_after_median": float(np.median(fid_after)),
+        "jaccard_permutation_null": float(np.mean(perm_jac)),
+        "keep_ratio_after_median": float(np.median(ratio_after)),
         "rows": [{"node": int(n), "jaccard": float(j),
-                  "fid_after": float(f)} for n, j, f in zip(common, jac, fid_after)],
+                  "keep_ratio_after": float(f)}
+                 for n, j, f in zip(common, jac, ratio_after)],
     }, indent=2, ensure_ascii=False), encoding="utf-8")
 
     checks = [
         ("FGA 确实降了准确率（≥0.03）", acc0 - acc1 >= 0.03, f"↓{acc0 - acc1:.4f}"),
         ("Jaccard 中位在 (0,1) 内（既不僵化也不乱）",
          0.0 < np.median(jac) < 1.0, f"{np.median(jac):.3f}"),
-        ("攻击后解释仍高于随机边集水平",
-         np.median(jac) > np.mean(rand_jac) * 2, f"{np.median(jac):.3f} vs {np.mean(rand_jac):.3f}"),
-        ("攻击后解释边保真度 ≥0.3", np.median(fid_after) >= 0.3,
-         f"{np.median(fid_after):.3f}"),
+        ("解释随攻击改变，但高于跨节点置换零假设",
+         np.median(jac) > np.mean(perm_jac), f"{np.median(jac):.3f} vs {np.mean(perm_jac):.3f}"),
+        ("攻击后只留解释边，目标类概率仍剩 ≥50%", np.median(ratio_after) >= 0.5,
+         f"{np.median(ratio_after):.0%}"),
     ]
     ok = True
     print()

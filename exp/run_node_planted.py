@@ -91,10 +91,8 @@ def main() -> int:
 
         ex = explain_node.explain_node(model, feats, g["edges"], node, cls, K, seed=SEED)
         cand = ex["cand"]
-        # 跳过判据：掩码几乎无差异 = 排不出序。注意不是 n_kept==0——
-        # 解释器要的是**排序**，全在 0.5 以下但仍有序时同样可用。
-        spread = float(np.max(ex["mask"]) - np.min(ex["mask"])) if len(ex["mask"]) else 0.0
-        if len(cand) < 2 * K or spread < 0.05:
+        # 跳过判据：第 k 与第 k+1 名并列 = 排不出序（不是 n_kept==0）
+        if len(cand) < 2 * K or not ex["decidable"]:
             n_skip += 1
             p_empty = _local_prob(model, feats, g["edges"], node, cls, [])
             if p_empty > 0.5:
@@ -123,17 +121,21 @@ def main() -> int:
         ranks = np.argsort(np.argsort(delta)) / max(len(delta) - 1, 1)
         pct = float(ranks[order].mean())
 
-        _, _, fp, fm = explain_node.fidelity(model, feats, g["edges"], node, cls, top)
+        # 保真度用**全局**算子（与训练一致）：保留解释边后目标类概率还剩多少
+        pk, p, suff, nec = explain_node.global_fidelity(
+            model, feats, g["edges"], g["n"], node, cls, list(top))
+        keep_ratio = pk / max(p, 1e-8)
+
         rows.append({"node": node, "class": cls, "n_cand": int(len(cand)),
-                     "n_kept": ex["n_kept"], "delta_top": d_top,
-                     "delta_oracle": d_oracle, "delta_random": d_rand,
-                     "percentile": pct, "fid_plus": fp, "fid_minus": fm,
-                     "p_full": p_full, "p_empty": p_empty})
+                     "delta_top": d_top, "delta_oracle": d_oracle,
+                     "delta_random": d_rand, "percentile": pct,
+                     "p_keep": pk, "p_full": p, "keep_ratio": keep_ratio,
+                     "suff": suff, "nec": nec, "n_topk_gap": ex["topk_gap"]})
     dt = np.array([r["delta_top"] for r in rows])
     dor = np.array([r["delta_oracle"] for r in rows])
     dr = np.array([r["delta_random"] for r in rows])
     pct = np.array([r["percentile"] for r in rows])
-    fid = np.array([r["fid_plus"] for r in rows])
+    keep = np.array([r["keep_ratio"] for r in rows])
     eff = dt / np.maximum(dor, 1e-12)
     # 效率比值只在 oracle Δ 有实际量级时才有意义（分母趋 0 会炸成 ±几十）
     eff_v = dt[dor > 1e-3] / dor[dor > 1e-3]
@@ -149,12 +151,12 @@ def main() -> int:
           f"其中删光边仍能正确预测 {skip_keep_struct} 个 "
           f"（若为 0，说明这些是**解释器失败**，不是'模型不用结构'）")
     print(f"消融Δ：解释边 {dt.mean():.4f} / oracle {dor.mean():.4f} / 随机 {dr.mean():.4f}")
-    print(f"vs 随机：{dt.mean() / max(dr.mean(), 1e-12):.2f}×，Wilcoxon p={p_rand:.2e}")
+    print(f"解释边 − 随机 = {dt.mean() - dr.mean():+.4f}；Wilcoxon p={p_rand:.2e}"
+          f"（比值不再报：随机 Δ 接近 0，除法没有意义）")
     print(f"oracle 效率：中位 {np.median(eff_v):.3f}（仅 {n_eff}/{len(rows)} 个 oracle Δ>1e-3 的节点）")
     print(f"候选池内百分位：均值 {pct.mean():.3f}（随机 ≈ 0.5）")
-    print(f"Fid+ 中位 {np.median(fid):.3f}；存活边 n_kept 中位 {np.median([r['n_kept'] for r in rows]):.0f}")
-    print(f"候选池 {min(r['n_cand'] for r in rows)}–{max(r['n_cand'] for r in rows)} 条（中位 "
-          f"{np.median([r['n_cand'] for r in rows]):.0f}）")
+    print(f"保留解释边后目标类概率仍剩 {np.median(keep):.0%}（中位）；"
+          f"候选池中位 {np.median([r['n_cand'] for r in rows]):.0f} 条")
 
     out = ROOT / "results" / "node_planted.json"
     out.parent.mkdir(exist_ok=True)
@@ -168,12 +170,12 @@ def main() -> int:
         "n_picked": int(len(picked)),
         "delta_top_mean": float(dt.mean()), "delta_oracle_mean": float(dor.mean()),
         "delta_random_mean": float(dr.mean()),
-        "ratio_vs_random": float(dt.mean() / max(dr.mean(), 1e-12)),
+        "delta_gap": float(dt.mean() - dr.mean()),
         "wilcoxon_p_random": p_rand, "wilcoxon_p_oracle": p_oracle,
         "oracle_efficiency_median": float(np.median(eff_v)), "n_efficiency": n_eff,
         "percentile_mean": float(pct.mean()),
-        "fid_plus_median": float(np.median(fid)),
-        "n_kept_median": float(np.median([r["n_kept"] for r in rows])),
+        "keep_ratio_median": float(np.median(keep)),
+        "suff_median": float(np.median([r["suff"] for r in rows])),
         "rows": rows}, indent=2, ensure_ascii=False), encoding="utf-8")
 
     checks = [
@@ -182,7 +184,8 @@ def main() -> int:
         ("候选池内百分位 > 0.5", pct.mean() > 0.5, f"{pct.mean():.3f}"),
         ("oracle 效率 ≥ 0.3", np.median(eff_v) >= 0.3 if n_eff else False,
          f"{np.median(eff_v):.3f}（n={n_eff}）"),
-        ("每节点取到的解释边恰为 k 条", all(len(r) > 0 for r in rows), "assert 通过"),
+        ("保留解释边后目标类概率仍剩 ≥50%（中位）", np.median(keep) >= 0.5,
+         f"{np.median(keep):.0%}"),
     ]
     ok = True
     print()

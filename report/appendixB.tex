@@ -1,4 +1,4 @@
-\section{补充实验：把“三轴”搬到没有白盒的任务上}\label{sec:appB}
+﻿\section{补充实验：把“三轴”搬到没有白盒的任务上}\label{sec:appB}
 
 \noindent\textbf{这一节是主报告的补充，不是替代。}
 第~\ref{sec:discussion}~节的结论有一个前提：算法已知。节点分类没有精确算法——没有人能写出“给定图，输出每个节点的类”的正确程序。
@@ -6,65 +6,72 @@
 
 \subsection{设定}
 
-\textbf{数据}：Cora（2708 节点、1433 维词袋、7 类、去重后 5278 条边）。采用 Planetoid 的公开划分：训练 140（节点 0--139）、验证 500、测试 1000。
-同配率 0.811。
+\textbf{数据}：Cora（2708 节点、1433 维词袋、7 类、去重后 5278 条边）。采用 Planetoid 公开划分：训练 140（节点 0--139）、验证 500、测试 1000。同配率 0.811。
 
-\textbf{模型}：手写 2 层 GCN（hidden 16、dropout 0.5、Adam，$\hat A=D^{-1/2}(A+I)D^{-1/2}$），
-以及结构完全相同的 MLP 作为“无结构”对照——两者参数量都是 23{,}040，唯一差别是每层是否左乘 $\hat A$。
+\textbf{模型}：手写 2 层 GCN（hidden 16、dropout 0.5，$\hat A=D^{-1/2}(A+I)D^{-1/2}$），
+以及结构完全相同的 MLP 作无结构对照——参数量都是 23{,}040，唯一差别是每层是否左乘 $\hat A$。
 
-\textbf{解释器}：边掩码（GNNExplainer 简化版）。冻结模型，为目标节点学一张边掩码 $m$：
-\begin{equation}
-\min_m\ -\log p\bigl(c \mid A\odot m\bigr)+\lambda\,\mathrm{mean}(m),\qquad \lambda=0.05,
-\end{equation}
-$c$ 取模型的**全局预测类**；温度固定为 1（不做退火，否则掩码会塌成硬 0/1 产生大量并列）。
+\textbf{解释器}：两种。
+(i) 边掩码（GNNExplainer 简化版）：冻结模型，学一张边掩码 $m$，最小化 $-\log p(c\mid A\odot m)+\lambda\,\mathrm{mean}(m)$；
+(ii) 梯度显著性：$\mathrm{score}_e=\partial\log p(c)/\partial w_e$。
 
-\textbf{真值}：Cora 上不存在“正确的解释”，所以我们另造合成 SBM——标签由社区决定，
-再用\textbf{消融}定义每条边的真实重要性：删掉它，目标类概率下降多少（$\Delta$）。
+\textbf{真值}：Cora 上没有“正确的解释”，所以另造合成 SBM（标签由社区决定），
+用\textbf{消融}定义每条边的真实重要性 $\Delta_e$：删掉它，目标类概率下降多少。
 
 \subsection{结果}
 
 \begin{table}[H]
 \centering
-\caption{B 线主要数字（Cora 公开划分；SBM 用于解释真值检验）}
+\caption{B 线主要数字}
 \label{tab:appB}
-\small
+\footnotesize
+\setlength{\tabcolsep}{3pt}
 \begin{tabular}{lll}
 \toprule
 维度 & 结果 & 说明 \\
 \midrule
 节点分类 & GCN 0.8162，MLP 0.5539 & 差 26 个点，只能归因于图结构 \\
-随机加边（10\%） & $-0.017$ & 模型对随机扰动相当耐受 \\
-FGA（10\%） & $-0.119$ & 同预算下约为随机的 7 倍 \\
-解释 vs 随机 & $14.19\times$（Wilcoxon $p=6.9\times10^{-8}$） & SBM 消融真值 \\
-oracle 效率 & 中位 0.904 & 达到“按真值排序”的 90\% \\
-候选池内百分位 & 0.646 & 随机为 0.5 \\
-保真度 & 全局 Fid$^+$ 0.666 vs 随机 0.443 & 在全局模型上算，不用本地替身 \\
-跨模型种子稳定性 & Jaccard 中位 1.000 & 见下文限制 \\
+随机加边 10\% & $-0.017$ & 对随机扰动相当耐受 \\
+FGA 10\% & $-0.119$ & 同预算约为随机的 7 倍 \\
+\midrule
+SBM：解释边 $\Delta$ & 0.0406 & 随机边 $-0.0006$（Wilcoxon $p=2.7\times10^{-5}$） \\
+SBM：oracle 效率 & 中位 0.922 & 达到“按真值排序”的 92\%（21/25 个节点可算） \\
+SBM：无定义比例 & 44\%（20/45） & 掩码并列，排不出序；这些节点删光边后无一能正确预测 \\
+\midrule
+Cora：掩码解释器 & \textbf{0/120 可判定} & 候选边上百条时掩码塌成常数，top-$k$ 只是 argsort 的并列顺序 \\
+Cora：显著性保留率 & 1.211 vs incident 随机 1.208 & \textbf{fidelity 无判别力}（仅差 0.2\%） \\
+Cora：显著性跨模型 Jaccard & 0.714 & 比掩码解释器可靠 \\
+\midrule
+攻击后解释 & Jaccard 0.091 & 跨节点置换零假设 0.000；解释随攻击改变 \\
+负控制 & 3/3 & bottom-$k$ 桩实现把 $\Delta$ 压到 0.08 倍 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.48\textwidth]{b_attack.png}
-\includegraphics[width=0.48\textwidth]{b_explain.png}
-\caption{左：随机加边与 FGA 的预算曲线（Cora）。右：解释边的消融重要性、oracle 上界与随机基线，以及逐节点效率散点。}
-\label{fig:appB}
-\end{figure}
-
-\subsection{四条限制（都必须写）}
+\subsection{三条限制（都必须写）}
 
 \begin{enumerate}[leftmargin=1.6em]
-\item \textbf{20\% 的节点给不出解释。}掩码在这些节点上塌成常数（排不出序）。补测显示：删光边后仍能正确预测的是 \textbf{0 个}——所以这是解释器失败，不是“模型不用结构”。
-\item \textbf{本地替身会翻类。}2 跳子图本地重归一化后，Cora 上 28\%、SBM 上 20\% 的节点预测类与全局不同。因此保真度一律改用全局前向计算；本地数只作诊断。
-\item \textbf{跨模型稳定性高得可疑。}Jaccard 中位 1.000 说明三个不同种子训出的模型得到几乎相同的解释——这更可能反映“解释器在挑结构上显著的边”，而不是“证据一致”。单看这个数字会把缺陷读成优点。
-\item \textbf{只跑了一个模型种子做攻击与解释}，未做跨种子平均；SBM 的 $p_{\mathrm{in}}/p_{\mathrm{out}}$ 也没做敏感性分析。
+\item \textbf{掩码解释器在 Cora 的规模上失败。}候选边上百条时，稀疏惩罚把掩码压成近似常数，
+第 6 与第 7 名严格并列（差值 $<10^{-6}$），top-$k$ 是 \texttt{argsort} 打破并列的产物。120 次解释里没有一次可判定。
+真正可用的结果全部来自小候选集的 SBM（约 25 条）和梯度显著性。
+\item \textbf{SBM 上仍有 44\% 的节点给不出排序。}这些节点删光边后没有一个还能正确预测，
+所以是解释器失败，不是“模型不用结构”。把失败率写成 20\% 或“退化”都会低估它。
+\item \textbf{Fidelity 在 Cora 上不能区分解释。}只保留 6 条 incident 边（无论解释器挑的还是随机的），
+目标类概率都还在 120\% 上下——因为 GCN 的自环让节点自身特征占主导。
+这从反面印证了主报告的结论：保真度是个弱指标，不能单独用来判断解释质量。
 \end{enumerate}
 
 \subsection{与主报告的关系}
 
 主报告证明：在最短路这种算法已知的任务上，保真度会被常数预测器骗过（Fidelity$^+$ 0.978 而预测与真值相关系数 $-0.10$）。
-本节把同一套怀疑搬到白盒缺席的任务上，结论是更弱的正面结果：
-解释器确实能找回大部分真正重要的边（oracle 效率 0.90），
-但它有 20\% 的失败率、依赖局部替身、且稳定性高到值得怀疑。
-换句话说，\textbf{没有白盒时，“解释是对的”只能被验证到 90\% 这个量级，而且要先付 20\% 的失败率}。
+本节把同一套怀疑搬到白盒缺席的任务上，得到的结论更接近“方法论警示”而不是“正面结果”：
+
+\begin{itemize}[leftmargin=1.6em]
+\item 在有真值的小合成图上，解释器确实能找回大部分重要边（oracle 效率 0.92）；
+\item 但一旦规模上去（Cora，候选上百条），最常用的掩码解释器直接失效；
+\item 而在真实任务上，唯一可用的保真度指标**没有判别力**。
+\end{itemize}
+
+换句话说，\textbf{没有白盒时，“解释是对的”这件事只能在受控的合成环境里被验证，而且要么先付出近一半的失败率，要么换一个更朴素（梯度显著性）的解释器}。
+这与主报告“白盒三轴全胜”并不矛盾——它说明的是：白盒缺席之后，连“验证”本身都变得昂贵。
+

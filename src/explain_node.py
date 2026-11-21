@@ -22,15 +22,20 @@ import torch.nn.functional as F
 
 
 def _norm_from_weights(rows, cols, w, n):
-    """由带权边表构造对称归一化 Â = D^{-1/2}(A+I)D^{-1/2}。"""
-    deg = torch.zeros(n, dtype=w.dtype)
-    deg = deg.index_add(0, rows, w).index_add(0, cols, w)
+    """由带权边表构造 Â = D^{-1/2}(A+I)D^{-1/2}，与 cora.normalized_adj 同一算子。
+
+    两个曾经踩过的坑（用户/检测反复指出）：
+      · `rows` 里已经含每条无向边的两个端点，若再在 `cols` 上累加一次度数，
+        度数会变成 2×degree，d 变成 1/√(2deg+1)；
+      · 自环在 Â 里应贡献 d_i·1·d_i = d²，不是 d。
+    第三版加了断言：全边表下必须与训练用的算子逐元素一致。
+    """
+    deg = torch.zeros(n, dtype=w.dtype).index_add(0, rows, w)
     d = (deg + 1.0).clamp_min(1e-8).pow(-0.5)
     vals = w * d[rows] * d[cols]
-    idx = torch.stack([rows, cols])
-    A = torch.sparse_coo_tensor(idx, vals, (n, n)).coalesce()
+    A = torch.sparse_coo_tensor(torch.stack([rows, cols]), vals, (n, n)).coalesce()
     di = torch.arange(n)
-    A_I = torch.sparse_coo_tensor(torch.stack([di, di]), d, (n, n))
+    A_I = torch.sparse_coo_tensor(torch.stack([di, di]), d * d, (n, n))
     return (A + A_I).coalesce()
 
 
@@ -91,9 +96,43 @@ def explain_node(model, features: np.ndarray, edges: np.ndarray, node: int,
 
     with torch.no_grad():
         m_final = torch.sigmoid(logits_m).numpy()
+    order = np.argsort(-m_final)
+    gap = float(m_final[order[k - 1]] - m_final[order[k]]) if len(order) > k else 0.0
     return {"cand": sel, "mask": m_final, "n_kept": int((m_final > 0.5).sum()),
             "subgraph_size": int(len(sub)), "loss": float(losses[-1]),
-            "loss_first": float(losses[0])}
+            "loss_first": float(losses[0]),
+            # 判据：掩码有没有把 top-k 拉开。gap≈0 说明第 k 与第 k+1 名并列，
+            # 此时 top-k 是 argsort 的打破并列顺序，不是模型的判断。
+            "spread": float(m_final.max() - m_final.min()) if len(m_final) else 0.0,
+            "topk_gap": gap, "decidable": bool(gap > 1e-6)}
+
+
+def saliency_explanation(model, features: np.ndarray, edges: np.ndarray, n_nodes: int,
+                         node: int, cls: int, k: int):
+    """梯度显著性：score_e = ∂ log p(cls) / ∂ w_e，取 top-k。
+
+    与掩码解释器的区别：它的打分是连续的、几乎不会并列，所以在 Cora 这种
+    候选上百条的规模上仍然可判定（掩码优化器在那里全部并列，见 3.2 的结论）。
+    """
+    model.eval()
+    X = torch.from_numpy(features.astype(np.float32))
+    u = torch.from_numpy(np.asarray(edges[:, 0], dtype=np.int64))
+    v = torch.from_numpy(np.asarray(edges[:, 1], dtype=np.int64))
+    rows = torch.cat([u, v])
+    cols = torch.cat([v, u])
+
+    w = torch.ones(len(rows), requires_grad=True)
+    A = _norm_from_weights(rows, cols, w, n_nodes)
+    out = F.log_softmax(model(A, X)[node], dim=0)
+    model.zero_grad()
+    (-out[cls]).backward()
+    g = w.grad.detach().abs()
+    score = g[:len(edges)] + g[len(edges):]      # 一条无向边两个方向的分量相加
+    order = np.argsort(-score.numpy())[:k]
+    vals = np.sort(score.numpy())[::-1]
+    gap = float(vals[k - 1] - vals[k]) if len(vals) > k else 0.0
+    return {"edges": order.tolist(), "scores": score.numpy(), "decidable": bool(gap > 1e-9),
+            "topk_gap": gap}
 
 
 def global_fidelity(model, features: np.ndarray, edges: np.ndarray, n_nodes: int,
@@ -124,8 +163,8 @@ def global_fidelity(model, features: np.ndarray, edges: np.ndarray, n_nodes: int
     pk = float(probs(kept)[cls])
     rest = [e for e in range(len(edges)) if e not in set(kept)]
     pd = float(probs(rest)[cls])
-    eps = 1e-8
-    return pk, p, 1 - abs(pk - p) / max(p, eps), 1 - abs(pd - p) / max(p, eps)
+    # 标准口径：充分性 = 保留后的增量，必要性 = 删掉后的降量。差值不是比值。
+    return pk, p, pk - p, p - pd
 
 
 def fidelity(model, features: np.ndarray, edges: np.ndarray,
@@ -142,8 +181,7 @@ def fidelity(model, features: np.ndarray, edges: np.ndarray,
     pk = float(_forward_probs(model, features, edges, node, kept, n_hops)[cls])
     rest = [e for e in range(len(edges)) if e not in set(kept)]
     pd = float(_forward_probs(model, features, edges, node, rest, n_hops)[cls])
-    eps = 1e-8
-    return pk, p, 1 - abs(pk - p) / max(p, eps), 1 - abs(pd - p) / max(p, eps)
+    return pk, p, pk - p, p - pd
 
 
 def _forward_probs(model, features, edges, node, keep, n_hops):

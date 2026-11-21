@@ -1,4 +1,4 @@
-"""5.1 验收：三条负控制——桩实现必须让判据失败。
+﻿"""5.1 验收：三条负控制——桩实现必须让判据失败。
 
 1. 把 GCN 换成 MLP（去掉图）：Cora 上准确率必须掉到 ≤0.65
 2. 把解释器换成**均匀掩码**（等价于随便挑 k 条边）：SBM 上的"解释重要性倍率"必须塌到 ~1
@@ -63,7 +63,11 @@ def control_shuffled_labels(seed: int = 0, epochs: int = 100):
 
 
 def control_uniform_mask(seed: int = 0, n_nodes: int = 8, k: int = 6) -> float:
-    """把解释器换成均匀掩码：top-k 变成随便挑，倍率应塌到 ~1。"""
+    """桩实现：把解释边换成**掩码最低的 k 条**（bottom-k），即与真值反着来。
+
+    上一版用"随机 k 条"是自证的（随机 vs 随机，比值必然 ≈1）；bottom-k 才是
+    系统性错误排序，如果主判据还能通过，说明主判据没有牙。
+    """
     torch.manual_seed(seed)
     np.random.seed(seed)
     g = sbm.make_sbm(seed=seed)
@@ -82,13 +86,11 @@ def control_uniform_mask(seed: int = 0, n_nodes: int = 8, k: int = 6) -> float:
     for node in splits["test_idx"][:n_nodes]:
         node = int(node)
         cls = int(torch.argmax(logits[node]))
-        # 均匀掩码：直接取该节点 2 跳子图的候选边（与 explain_node 同构），但顺序随机
         ex = explain_node.explain_node(model, feats, g["edges"], node, cls, k, seed=seed)
-        cand = ex["cand"]
+        cand, mask = ex["cand"], ex["mask"]
         if len(cand) < 2 * k:
             continue
-        order = rng.permutation(len(cand))[:k]      # 均匀掩码 = 无序
-        top = cand[order]
+        order = np.argsort(mask)[:k]          # bottom-k：最不重要的边
         p_full = float(explain_node._forward_probs(model, feats, g["edges"], node, None, 2)[cls])
         delta = np.array([p_full - float(explain_node._forward_probs(
             model, feats, g["edges"], node, [e for e in cand if e != c], 2)[cls])
@@ -96,20 +98,20 @@ def control_uniform_mask(seed: int = 0, n_nodes: int = 8, k: int = 6) -> float:
         dt.append(float(delta[order].mean()))
         dr.append(float(np.mean([
             delta[rng.choice(len(cand), size=k, replace=False)].mean() for _ in range(20)])))
-    return float(np.mean(dt) / max(np.mean(dr), 1e-12))
+    return float(np.mean(dt) / max(np.mean(dr), 1e-12)) if np.mean(dr) > 1e-9 else 0.0
 
 
 def main() -> int:
     acc_mlp = control_mlp()
     acc_shuf, major = control_shuffled_labels()
-    ratio_uniform = control_uniform_mask()
+    ratio_bottom = control_uniform_mask()
 
     checks = [
         ("MLP 顶替 GCN：准确率 ≤0.65", acc_mlp <= 0.65, f"{acc_mlp:.4f}"),
         ("打乱标签：准确率 ≤ 多数类+0.05", acc_shuf <= major + 0.05,
          f"{acc_shuf:.4f} vs 多数类 {major:.3f}"),
-        ("均匀掩码：解释重要性倍率 <2（不能复现 14×）", ratio_uniform < 2.0,
-         f"{ratio_uniform:.2f}×"),
+        ("bottom-k 桩实现：解释重要性倍率 <2（不能复现主结论）", ratio_bottom < 2.0,
+         f"{ratio_bottom:.2f}×"),
     ]
     ok = True
     print()
@@ -122,3 +124,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

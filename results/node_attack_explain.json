@@ -1,6 +1,6 @@
 {
   "config": {
-    "n_nodes": 25,
+    "n_nodes": 30,
     "k": 6,
     "eps": 0.05,
     "seed": 0
@@ -10,135 +10,160 @@
   "drop": 0.07499998807907104,
   "flipped": 2,
   "n_nodes_flip": 30,
-  "jaccard_median": 0.3333333333333333,
-  "jaccard_mean": 0.4894199134199134,
-  "jaccard_random": 0.0,
-  "fid_plus_after_median": 0.5551053054105524,
+  "jaccard_median": 0.09090909090909091,
+  "jaccard_mean": 0.14565656565656568,
+  "jaccard_permutation_null": 0.0,
+  "keep_ratio_after_median": 1.1572937668307717,
   "rows": [
     {
       "node": 1740,
       "jaccard": 0.0,
-      "fid_after": 0.5816997691048195
+      "keep_ratio_after": 1.1278456618596868
     },
     {
       "node": 1746,
       "jaccard": 0.0,
-      "fid_after": 0.38199832305585923
+      "keep_ratio_after": 1.2180309876616653
     },
     {
       "node": 1791,
-      "jaccard": 0.3333333333333333,
-      "fid_after": 0.5421629907399232
+      "jaccard": 0.09090909090909091,
+      "keep_ratio_after": 1.8787093884485953
     },
     {
       "node": 1800,
-      "jaccard": 1.0,
-      "fid_after": 0.8529186517893019
+      "jaccard": 0.5,
+      "keep_ratio_after": 0.8507842333480437
     },
     {
       "node": 1820,
-      "jaccard": 0.2,
-      "fid_after": 0.1523342263529166
+      "jaccard": 0.0,
+      "keep_ratio_after": 1.1825121697600898
     },
     {
       "node": 1865,
-      "jaccard": 1.0,
-      "fid_after": 0.32356202516885935
+      "jaccard": 0.5,
+      "keep_ratio_after": 0.9809949458026135
     },
     {
       "node": 1880,
-      "jaccard": 0.5,
-      "fid_after": 0.6365345140430166
+      "jaccard": 0.09090909090909091,
+      "keep_ratio_after": 1.0589129840649014
     },
     {
       "node": 1882,
-      "jaccard": 1.0,
-      "fid_after": -0.4190033660723078
+      "jaccard": 0.5,
+      "keep_ratio_after": 1.4356186843342846
     },
     {
       "node": 1884,
-      "jaccard": 0.09090909090909091,
-      "fid_after": 0.5559879685183555
+      "jaccard": 0.3333333333333333,
+      "keep_ratio_after": 1.133645451362637
+    },
+    {
+      "node": 1938,
+      "jaccard": 0.0,
+      "keep_ratio_after": 1.101693661060283
     },
     {
       "node": 1968,
       "jaccard": 0.0,
-      "fid_after": 0.5922642465061505
+      "keep_ratio_after": 1.7535007596167975
     },
     {
       "node": 2033,
-      "jaccard": 0.09090909090909091,
-      "fid_after": 0.5551053054105524
+      "jaccard": 0.0,
+      "keep_ratio_after": 1.1846035403486388
     },
     {
       "node": 2096,
-      "jaccard": 1.0,
-      "fid_after": 0.8501098626248028
+      "jaccard": 0.0,
+      "keep_ratio_after": 1.3749881353244848
     },
     {
       "node": 2126,
-      "jaccard": 0.3333333333333333,
-      "fid_after": -0.901955626696324
+      "jaccard": 0.0,
+      "keep_ratio_after": 1.0403046855240186
     },
     {
       "node": 2133,
-      "jaccard": 0.09090909090909091,
-      "fid_after": 0.6733705942904185
+      "jaccard": 0.5,
+      "keep_ratio_after": 1.1057450226372434
     },
     {
       "node": 2136,
-      "jaccard": 1.0,
-      "fid_after": -0.3249065285355168
+      "jaccard": 0.0,
+      "keep_ratio_after": 1.7080279689012174
     },
     {
       "node": 2156,
-      "jaccard": 1.0,
-      "fid_after": 0.9492371750970113
+      "jaccard": 0.09090909090909091,
+      "keep_ratio_after": 1.112923451337082
+    },
+    {
+      "node": 2179,
+      "jaccard": 0.3333333333333333,
+      "keep_ratio_after": 1.2885072599088807
     },
     {
       "node": 2221,
       "jaccard": 0.0,
-      "fid_after": 0.5069772122480806
+      "keep_ratio_after": 1.0734640269218547
     },
     {
       "node": 2277,
-      "jaccard": 1.0,
-      "fid_after": 0.6984739036611682
+      "jaccard": 0.09090909090909091,
+      "keep_ratio_after": 1.1047887878895741
     },
     {
       "node": 2293,
-      "jaccard": 1.0,
-      "fid_after": 0.9070575820995043
+      "jaccard": 0.3333333333333333,
+      "keep_ratio_after": 1.614528451399022
     },
     {
       "node": 2318,
-      "jaccard": 0.5,
-      "fid_after": 0.5334000718879413
+      "jaccard": 0.2,
+      "keep_ratio_after": 1.7679006494777485
     },
     {
       "node": 2372,
       "jaccard": 0.09090909090909091,
-      "fid_after": 0.402055577722495
+      "keep_ratio_after": 1.2054371607742502
     },
     {
       "node": 2390,
       "jaccard": 0.09090909090909091,
-      "fid_after": 0.31038678582189416
+      "keep_ratio_after": 1.1809420822989063
+    },
+    {
+      "node": 2433,
+      "jaccard": 0.0,
+      "keep_ratio_after": 0.0453863746536558
     },
     {
       "node": 2445,
-      "jaccard": 0.7142857142857143,
-      "fid_after": 0.6331080448322626
+      "jaccard": 0.3333333333333333,
+      "keep_ratio_after": 1.332579077917648
     },
     {
       "node": 2490,
-      "jaccard": 1.0,
-      "fid_after": 0.5868503447590221
+      "jaccard": 0.2,
+      "keep_ratio_after": 1.2515872387726479
     },
     {
       "node": 2495,
-      "jaccard": 0.2,
-      "fid_after": 0.22911833940232118
+      "jaccard": 0.0,
+      "keep_ratio_after": 0.99964104725722
+    },
+    {
+      "node": 2557,
+      "jaccard": 0.0,
+      "keep_ratio_after": 0.9999479799488787
+    },
+    {
+      "node": 2589,
+      "jaccard": 0.09090909090909091,
+      "keep_ratio_after": 1.1295527449705869
     }
   ]
 }
