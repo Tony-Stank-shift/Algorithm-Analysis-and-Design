@@ -5,8 +5,8 @@
   · 1708..2707 —— tx / ty 覆盖的 1000 个测试节点，test.index 给出它们的原始编号
   剩余节点（不在上面两块里的）特征全零、是孤立点。
 
-划分（公开划分，与 GCN 原论文一致）：
-  train 140（每类 20）、val 500、test 1000。
+划分（**公开划分**，与 GCN 原论文一致）：
+  train = 节点 0..139（Planetoid 的 ind.cora.x 就是这 140 个），val = 140..639，test = 1708..2707。
 """
 
 from __future__ import annotations
@@ -94,18 +94,14 @@ def load_cora(data_dir: str | Path = "data/cora") -> Dict:
 
 
 def make_splits(labels: np.ndarray, test_idx: np.ndarray, seed: int = 0):
-    """公开划分：每类 20 个训练、500 验证、1000 测试。"""
-    rng = np.random.default_rng(seed)
-    test_set = set(test_idx.tolist())
-    pool = np.array([i for i in range(labels.shape[0]) if i not in test_set])
+    """**公开划分**（Planetoid 原样）：train = 0..139，val = 140..639，test = 1708..2707。
 
-    train = []
-    for c in range(N_CLASSES):
-        cand = pool[labels[pool] == c]
-        train.extend(rng.choice(cand, size=20, replace=False).tolist())
-    train = np.sort(np.array(train))
-    rest = np.setdiff1d(pool, train)
-    val = np.sort(rng.choice(rest, size=500, replace=False))
+    上一版按类分层重采样，只有 10/140 与公开训练集重合——那不是公开划分，
+    与论文数字不可比（检测实测：公开划分 3 seed 均值 0.8170，重采样 0.8103）。
+    `ind.cora.x` 恰好就是这 140 个训练节点的特征，`x == allx[:140]` 可作断言。
+    """
+    train = np.arange(0, 140)
+    val = np.arange(140, 640)
     return {"train_idx": train, "val_idx": val, "test_idx": test_idx}
 
 

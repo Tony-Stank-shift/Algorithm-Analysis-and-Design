@@ -15,8 +15,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-torch.set_num_threads(1)   # 与主报告一致：保证同种子逐位可复现
-
 
 class GCN(nn.Module):
     def __init__(self, d_in: int, hidden: int, n_classes: int, dropout: float = 0.5):
@@ -65,6 +63,7 @@ def accuracy(logits: torch.Tensor, y: torch.Tensor, idx: np.ndarray) -> float:
 def train(model, A, X, y, splits, epochs: int = 200, lr: float = 0.01,
           weight_decay: float = 5e-4, patience: int = 100, seed: int = 0):
     """全监督 loss，但只用 train_idx 的标签；val 用于早停与选模型。"""
+    torch.set_num_threads(1)   # 单线程才保证同种子跨进程可复现（多线程归约顺序不定）
     torch.manual_seed(seed)
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     tr = torch.from_numpy(splits["train_idx"])

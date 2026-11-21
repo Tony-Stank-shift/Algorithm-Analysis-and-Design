@@ -74,6 +74,50 @@ def main() -> int:
     shape_ok = tuple(logits.shape) == (2708, 7) and torch.isfinite(logits).all()
     print(f"[{'OK' if shape_ok else 'X'}] 真实数据前向：{tuple(logits.shape)}，全有限={bool(torch.isfinite(logits).all())}")
 
+    # ---- 回归断言（检测指出上一版的 W=I 对照覆盖不到这些）----
+    # (a) 随机权重 + 非负 X，与 numpy 参考实现比对
+    torch.manual_seed(3)
+    g2 = node_gnn.GCN(5, 4, 3, dropout=0.0)
+    g2.eval()
+    Xr = torch.rand(6, 5)
+    Ar = torch.rand(6, 6)
+    Ar = (Ar + Ar.T) / 2
+    with torch.no_grad():
+        out = g2(Ar, Xr)
+    w1 = g2.w1.weight.detach().numpy()
+    w2 = g2.w2.weight.detach().numpy()
+    An = Ar.numpy()
+    # 两层：h1 = relu(Â X W1ᵀ)，out = Â h1 W2ᵀ —— 别漏第二个 Â
+    h1 = np.maximum(An @ Xr.numpy() @ w1.T, 0.0)
+    ref = An @ h1 @ w2.T
+    rand_ok = np.allclose(out.numpy(), ref, atol=1e-5)
+    print(f"[{'OK' if rand_ok else 'X'}] 随机权重下与 NumPy 参考 (Â·relu(ÂXW1)·W2) 一致")
+
+    # (b) dropout 只在 train 生效：eval 下两次前向必须相同
+    g3 = node_gnn.GCN(5, 4, 3, dropout=0.5)
+    g3.eval()
+    with torch.no_grad():
+        e1, e2 = g3(Ar, Xr), g3(Ar, Xr)
+    g3.train()
+    with torch.no_grad():
+        t1, t2 = g3(Ar, Xr), g3(Ar, Xr)
+    drop_ok = torch.allclose(e1, e2) and not torch.allclose(t1, t2)
+    print(f"[{'OK' if drop_ok else 'X'}] dropout：eval 两次一致、train 两次不同")
+
+    # (c) 损失只依赖 train_idx：打乱 test 标签后损失必须不变
+    y = torch.from_numpy(d["labels"])
+    tr = torch.from_numpy(d["train_idx"])
+    with torch.no_grad():
+        l1 = torch.nn.functional.cross_entropy(g(A_t, X_t)[tr], y[tr])
+    y2 = y.clone()
+    perm = torch.randperm(1000) + 1708
+    y2[perm] = y2[perm][torch.randperm(1000)]
+    with torch.no_grad():
+        l2 = torch.nn.functional.cross_entropy(g(A_t, X_t)[tr], y2[tr])
+    leak_ok = torch.allclose(l1, l2)
+    print(f"[{'OK' if leak_ok else 'X'}] 打乱 test 标签后训练损失不变（只算 train_idx）")
+
+    shape_ok = shape_ok and rand_ok and drop_ok and leak_ok
     ok = norm_ok and prop_ok and mlp_ok and shape_ok
     print("\n[PASS] 2.1" if ok else "\n[FAIL] 2.1")
     return 0 if ok else 1

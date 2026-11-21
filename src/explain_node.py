@@ -20,8 +20,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-torch.set_num_threads(1)
-
 
 def _norm_from_weights(rows, cols, w, n):
     """由带权边表构造对称归一化 Â = D^{-1/2}(A+I)D^{-1/2}。"""
