@@ -33,6 +33,11 @@ def get(arm: str = "minsum", depth: int = 8, seed: int = 0,
     if path.exists():
         model.load_state_dict(torch.load(path, weights_only=True))
     else:
+        import os
+        if os.environ.get("JARVIS_NO_TRAIN"):
+            raise RuntimeError(
+                f"缺少缓存 {path.name}，而当前是 --skip-train 模式。"
+                "请先跑一次完整的 python exp/run_black.py 生成 results/models/。")
         tr = T.build_samples(RB.gen_er, TRAIN_SEEDS, sources, seed0=7)
         T.train_model(model, tr, epochs=epochs, seed=seed)
         torch.save(model.state_dict(), path)

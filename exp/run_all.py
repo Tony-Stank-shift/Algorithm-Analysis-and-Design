@@ -44,6 +44,9 @@ def main() -> int:
 
     env = dict(**__import__("os").environ)
     env["PYTHONIOENCODING"] = "utf-8"
+    if args.skip_train:
+        # 让 _trained.get() 在缺缓存时报错，而不是悄悄重训 40 轮
+        env["JARVIS_NO_TRAIN"] = "1"
 
     results = []
     t_all = time.time()

@@ -1,7 +1,12 @@
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
+.venv/
 results/tmp/
+# 训练得到的模型权重：只保留 results/models/ 下的缓存（--skip-train 依赖它们）
+*.pt
+!results/models/
+!results/models/*.pt
 *.aux
 *.log
 *.out
@@ -9,7 +14,8 @@ results/tmp/
 *.synctex.gz
 *.fls
 *.fdb_latexmk
-
 report/preview/
 *.blg
 *.xdv
+.DS_Store
+Thumbs.db
