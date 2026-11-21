@@ -36,23 +36,24 @@ def _norm_from_weights(rows, cols, w, n):
     return (A + A_I).coalesce()
 
 
-def explain_node(model, features: np.ndarray, edges: np.ndarray, labels: np.ndarray,
-                 node: int, k: int, n_hops: int = 2, steps: int = 150,
-                 lr: float = 0.05, lam: float = 0.5, seed: int = 0):
-    """返回 top-k 解释边（原始边编号）与优化过程信息。
+def explain_node(model, features: np.ndarray, edges: np.ndarray, node: int,
+                 target_class: int, k: int, n_hops: int = 2, steps: int = 200,
+                 lr: float = 0.05, lam: float = 0.05, seed: int = 0):
+    """返回**全量候选边与掩码**，由调用方决定怎么取 top-k。
 
-    lam 不能太小：0.01 时模型本来就很自信，"全保留"的损失几乎是 0，
-    掩码会退化成全 1（实测 8 个节点里 2 个 std=0）。0.5 会逼它删到快崩，
-    此时活下来的边才接近"必要"。
+    上一版返回 top-k 的掩码值，导致一个致命问题：掩码在温度退火后塌成硬 0/1、
+    只留 1–3 条边，而调用方仍按 k=6 取，剩下的槽位从几百个并列的 0 里按索引抽——
+    等于把解释器自己判死的边算成"解释边"。
+
+    现在温度固定为 1（不做退火），掩码是软的、几乎无并列；同时返回
+    n_kept = #{m > 0.5}，调用方据此判断该节点的解释是否可判定。
     """
     rng = np.random.default_rng(seed)
-    n = features.shape[0]
     adj = {}
     for eid, (u, v) in enumerate(edges):
         adj.setdefault(int(u), []).append((int(v), eid))
         adj.setdefault(int(v), []).append((int(u), eid))
 
-    # L 跳子图
     cur, seen = {node}, {node}
     for _ in range(n_hops):
         nxt = set()
@@ -67,25 +68,23 @@ def explain_node(model, features: np.ndarray, edges: np.ndarray, labels: np.ndar
     sel = np.array([e for e in range(len(edges))
                     if int(edges[e, 0]) in remap and int(edges[e, 1]) in remap])
     if len(sel) == 0:
-        return {"edges": [], "mask": np.array([]), "loss": float("nan"),
+        return {"cand": np.array([], int), "mask": np.array([]), "n_kept": 0,
                 "subgraph_size": len(sub)}
 
     rows = torch.from_numpy(np.array([remap[int(edges[e, 0])] for e in sel]))
     cols = torch.from_numpy(np.array([remap[int(edges[e, 1])] for e in sel]))
     X = torch.from_numpy(features[sub].astype(np.float32))
     tgt = remap[int(node)]
-    y_t = int(labels[node])
 
     logits_m = torch.zeros(len(sel), requires_grad=True)
     opt = torch.optim.Adam([logits_m], lr=lr)
     model.eval()
     losses = []
-    for step in range(steps):
-        temp = 1.0 - 0.9 * step / max(steps - 1, 1)
-        m = torch.sigmoid(logits_m / temp)
+    for _step in range(steps):
+        m = torch.sigmoid(logits_m)          # 温度固定 1，避免塌成硬 0/1
         A_hat = _norm_from_weights(rows, cols, m, len(sub))
         out = model(A_hat, X)
-        loss = F.cross_entropy(out[tgt].unsqueeze(0), torch.tensor([y_t]))
+        loss = -F.log_softmax(out[tgt], dim=0)[int(target_class)]
         loss = loss + lam * m.mean()
         opt.zero_grad()
         loss.backward()
@@ -93,32 +92,23 @@ def explain_node(model, features: np.ndarray, edges: np.ndarray, labels: np.ndar
         losses.append(float(loss.detach()))
 
     with torch.no_grad():
-        m_final = torch.sigmoid(logits_m / 0.1).numpy()
-    order = np.argsort(-m_final)[:k]
-    chosen = sel[order]
-    return {
-        "edges": chosen.tolist(),
-        "mask": m_final[order].tolist(),
-        "loss": float(losses[-1]),
-        "loss_first": float(losses[0]),
-        "subgraph_size": int(len(sub)),
-        "n_candidate": int(len(sel)),
-    }
+        m_final = torch.sigmoid(logits_m).numpy()
+    return {"cand": sel, "mask": m_final, "n_kept": int((m_final > 0.5).sum()),
+            "subgraph_size": int(len(sub)), "loss": float(losses[-1]),
+            "loss_first": float(losses[0])}
 
 
-def fidelity(model, features: np.ndarray, edges: np.ndarray, labels: np.ndarray,
-             node: int, kept: list[int], n_hops: int = 2):
-    """只保留 kept 边后，目标节点原预测类概率的变化。
+def fidelity(model, features: np.ndarray, edges: np.ndarray,
+             node: int, cls: int, kept: list[int], n_hops: int = 2):
+    """只保留 kept 边后，**目标类 cls（全局预测类）**的局部概率变化。
 
-    返回 (p_keep, p_full, fid_plus, fid_minus)：
-      fid_plus  = 1 - |p_keep - p_full| / max(p_full, eps)   —— 保留它够不够
-      fid_minus = 1 - |p_del  - p_full| / max(p_full, eps)   —— 去掉它少不少
-    这里比较的是**原预测类**的概率，不是 max 概率（预测翻转时两者不同）。
+    返回 (p_keep, p_full, fid_plus, fid_minus)。
+    注意：这里的概率是 2 跳子图上本地重归一化的结果，与全局前向不总是同一个
+    预测（检测实测 6/39 节点 argmax 不同），所以它衡量的是"对局部算子"的保真，
+    报告里必须这样标注。
     """
     model.eval()
-    full = _forward_probs(model, features, edges, node, None, n_hops)
-    cls = int(torch.argmax(full))
-    p = float(full[cls])
+    p = float(_forward_probs(model, features, edges, node, None, n_hops)[cls])
     pk = float(_forward_probs(model, features, edges, node, kept, n_hops)[cls])
     rest = [e for e in range(len(edges)) if e not in set(kept)]
     pd = float(_forward_probs(model, features, edges, node, rest, n_hops)[cls])
