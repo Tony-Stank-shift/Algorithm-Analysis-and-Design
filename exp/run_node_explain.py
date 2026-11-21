@@ -71,22 +71,26 @@ def main() -> int:
 
             ex = explain_node.explain_node(model, X_np, d["edges"], node, cls, K,
                                            seed=EXPLAIN_SEED)
-            if ex["decidable"]:
+            mask_ok = bool(ex["decidable"])
+            if mask_ok:
                 mask_decidable += 1
+                order = np.argsort(-ex["mask"])[:K]
+                top = [int(e) for e in ex["cand"][order]]
+            else:
+                sal = explain_node.saliency_explanation(model, X_np, d["edges"], d["n"],
+                                                        node, cls, K)
+                top = [int(e) for e in sal["edges"]]
 
-            sal = explain_node.saliency_explanation(model, X_np, d["edges"], d["n"],
-                                                    node, cls, K)
-            top = [int(e) for e in sal["edges"]]
             pk, p, suff, nec = explain_node.global_fidelity(
                 model, X_np, d["edges"], d["n"], node, cls, top)
             inc = incident.get(node, [])
             rand = [int(e) for e in rng.choice(inc, size=min(K, len(inc)), replace=False)]
-            pk_r, p_r, _, _ = explain_node.global_fidelity(
+            pk_r, p_r, suff_r, nec_r = explain_node.global_fidelity(
                 model, X_np, d["edges"], d["n"], node, cls, rand)
             recs[node] = {"top": top, "p_full": p, "p_keep": pk,
                           "keep_ratio": pk / max(p, 1e-8), "suff": suff, "nec": nec,
                           "keep_ratio_random": pk_r / max(p_r, 1e-8),
-                          "mask_decidable": bool(ex["decidable"])}
+                          "nec_random": nec_r, "mask_decidable": mask_ok}
         per_seed[seed] = recs
         kr = np.array([r["keep_ratio"] for r in recs.values()])
         krr = np.array([r["keep_ratio_random"] for r in recs.values()])
@@ -117,9 +121,13 @@ def main() -> int:
         }
 
     mask_rate = mask_decidable / (len(nodes) * len(MODEL_SEEDS))
+    nec = np.array([r["nec"] for r in per_seed[MODEL_SEEDS[0]].values()])
+    nec_r = np.array([r["nec_random"] for r in per_seed[MODEL_SEEDS[0]].values()])
     print(f"掩码解释器可判定率：{mask_decidable}/{len(nodes) * len(MODEL_SEEDS)} "
-          f"= {mask_rate:.0%}（Cora 规模下失败）")
-    print(f"显著性 top-6 跨模型 Jaccard：中位 {np.median(jac):.3f}（{len(jac)} 对）")
+          f"= {mask_rate:.0%}")
+    print(f"必要性口径：删解释边后目标类概率降 {np.median(nec):+.3f}，"
+          f"删 incident 随机边 {np.median(nec_r):+.3f}")
+    print(f"跨模型 Jaccard：中位 {np.median(jac):.3f}（{len(jac)} 对）")
 
     out = ROOT / "results" / "node_explain.json"
     out.parent.mkdir(exist_ok=True)
@@ -136,15 +144,15 @@ def main() -> int:
     }, indent=2, ensure_ascii=False), encoding="utf-8")
 
     base = summary[str(MODEL_SEEDS[0])]
-    advantage = base["keep_ratio_median"] / max(base["keep_ratio_random_median"], 1e-8) - 1
     checks = [
-        ("显著性解释保留率 ≥50%", base["keep_ratio_median"] >= 0.5,
-         f"{base['keep_ratio_median']:.2f}"),
-        ("fidelity 在 Cora 上无判别力（|优势| <5%）——如实记录，不作为通过项",
-         True, f"优势 {advantage:+.1%}"),
-        ("显著性 top-6 跨模型 Jaccard 中位 ≥0.4", np.median(jac) >= 0.4,
-         f"{np.median(jac):.3f}"),
-        ("掩码解释器失败率如实记录", True, f"可判定 {mask_rate:.0%}"),
+        ("掩码解释器可判定率 ≥50%", mask_rate >= 0.5, f"{mask_rate:.0%}"),
+        ("充分性：保留解释边后概率高于 incident 随机",
+         base["keep_ratio_median"] > base["keep_ratio_random_median"],
+         f"{base['keep_ratio_median']:.2f} vs {base['keep_ratio_random_median']:.2f}"),
+        ("必要性：删解释边的降幅大于删随机边",
+         np.median(nec) > np.median(nec_r),
+         f"{np.median(nec):+.3f} vs {np.median(nec_r):+.3f}"),
+        ("跨模型 Jaccard 中位 ≥0.4", np.median(jac) >= 0.4, f"{np.median(jac):.3f}"),
     ]
     ok = True
     print()

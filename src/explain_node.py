@@ -74,8 +74,13 @@ def explain_node(model, features: np.ndarray, edges: np.ndarray, node: int,
         return {"cand": np.array([], int), "mask": np.array([]), "n_kept": 0,
                 "subgraph_size": len(sub)}
 
-    rows = torch.from_numpy(np.array([remap[int(edges[e, 0])] for e in sel]))
-    cols = torch.from_numpy(np.array([remap[int(edges[e, 1])] for e in sel]))
+    # 必须按**双方向**边表构造：_norm_from_weights 的约定是 rows/cols 各含两个方向。
+    # 上一版只传了单方向（u<v），得到的 Â 是上三角、度数只算了"较小端点"，
+    # 逐边梯度退化 → 掩码塌成常数（检测实测 max diff 0.94）。
+    u = torch.from_numpy(np.array([remap[int(edges[e, 0])] for e in sel]))
+    v = torch.from_numpy(np.array([remap[int(edges[e, 1])] for e in sel]))
+    rows = torch.cat([u, v])
+    cols = torch.cat([v, u])
     X = torch.from_numpy(features[sub].astype(np.float32))
     tgt = remap[int(node)]
 
@@ -85,7 +90,7 @@ def explain_node(model, features: np.ndarray, edges: np.ndarray, node: int,
     losses = []
     for _step in range(steps):
         m = torch.sigmoid(logits_m)          # 温度固定 1，避免塌成硬 0/1
-        A_hat = _norm_from_weights(rows, cols, m, len(sub))
+        A_hat = _norm_from_weights(rows, cols, torch.cat([m, m]), len(sub))
         out = model(A_hat, X)
         loss = -F.log_softmax(out[tgt], dim=0)[int(target_class)]
         loss = loss + lam * m.mean()
@@ -208,12 +213,14 @@ def _forward_probs(model, features, edges, node, keep, n_hops):
            and (keep_set is None or e in keep_set)]
     if not sel:
         return torch.ones(model.w2.out_features) / model.w2.out_features
-    rows = torch.tensor([remap[int(edges[e, 0])] for e in sel])
-    cols = torch.tensor([remap[int(edges[e, 1])] for e in sel])
+    u = torch.tensor([remap[int(edges[e, 0])] for e in sel])
+    v = torch.tensor([remap[int(edges[e, 1])] for e in sel])
+    rows = torch.cat([u, v])
+    cols = torch.cat([v, u])
     w = torch.ones(len(sel))
     X = torch.from_numpy(features[sub].astype(np.float32))
     with torch.no_grad():
-        A_hat = _norm_from_weights(rows, cols, w, len(sub))
+        A_hat = _norm_from_weights(rows, cols, torch.cat([w, w]), len(sub))
         out = model(A_hat, X)
         prob = F.softmax(out[remap[int(node)]], dim=0)
     return prob
