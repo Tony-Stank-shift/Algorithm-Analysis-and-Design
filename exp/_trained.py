@@ -26,6 +26,8 @@ def get(arm: str = "minsum", depth: int = 8, seed: int = 0,
         epochs: int = 40, sources: int = 2):
     CACHE.mkdir(parents=True, exist_ok=True)
     path = CACHE / f"{arm}_d{depth}_s{seed}.pt"
+    # 与 run_black 一致：单线程训练，否则同种子跨进程不可复现
+    torch.set_num_threads(1)
     torch.manual_seed(seed)                    # 必须早于 make_model
     model = RB.make_model(arm, depth)
     if path.exists():

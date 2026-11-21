@@ -100,6 +100,11 @@ def main() -> int:
     if args.quick:
         args.train_graphs, args.sources, args.epochs, args.seeds = 12, 1, 2, 1
 
+    # 训练必须单线程：多线程下 index_add_ / scatter_reduce_ 的归约顺序不固定，
+    # 浮点加法不满足结合律，同一个种子跨进程会跑出不同结果（实测 1 个种子两次
+    # 分别得到 MAE 2.49 与 2.20）。单线程后同种子逐位可复现。
+    torch.set_num_threads(1)
+
     t0 = time.time()
     tr = T.build_samples(gen_er, range(2000, 2000 + args.train_graphs), args.sources, seed0=7)
     tests = {
