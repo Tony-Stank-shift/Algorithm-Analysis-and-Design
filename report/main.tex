@@ -1,4 +1,4 @@
-﻿\documentclass[a4paper,10pt]{article}
+\documentclass[a4paper,10pt]{article}
 
 \usepackage[UTF8]{ctex}
 \setCJKmainfont{SimSun}[BoldFont=SimHei]
@@ -14,8 +14,6 @@
 \usepackage{caption}
 \usepackage{xcolor}
 \usepackage{enumitem}
-\usepackage{algorithm}
-\usepackage{algpseudocode}
 \usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue]{hyperref}
 
 \graphicspath{{../results/fig/}}
@@ -29,7 +27,7 @@
 \renewcommand{\proofname}{证明}
 
 \title{\bfseries 图算法中的“白盒”与“黑盒”：从 Dijkstra 到图神经网络\\[2pt]
-\large ——以最短路为载体的三轴实证研究}
+\large ——以最短路与节点分类为载体的三轴实证研究}
 \author{黄锦添\quad 25121605\\ 上海大学未来技术学院\quad 人工智能}
 \date{2026 年 12 月}
 
@@ -38,28 +36,29 @@
 
 \begin{abstract}
 \noindent
-本文不做“经典算法综述 + 图神经网络综述”的拼接，而是把两类方法放进\emph{同一个任务}——单源最短路——用同一批图、同一套指标做对照。
-理论上，我们证明 $k$ 层消息传递在 min-sum 聚合下与同步 Bellman-Ford 的第 $k$ 轮逐点等价，并由此给出一个构造性反例说明“深度不足”是结构性错误而非训练不足。
-实验上，我们设置三档模型：未训练的恒等 min-sum（即 Bellman-Ford 本身）、只用 2 个参数学习边权变换的 min-sum、以及约 $1.0\times10^5$ 参数的 mean 聚合 GNN，
-在准确率、鲁棒性、可解释性三个轴上测量。主要发现有三条：
-（1）\textbf{训练是负收益}——恒等 min-sum 跑满 128 轮的平均绝对误差为 $\sim10^{-6}$，训练后的 2 参数模型反而退化到 $0.024$，
-说明在这个任务上结构先验已经包含了完整算法，用有限深度的监督去“学”它只会把精确解推开；
-（2）白盒的鲁棒性不是“更抗打”，而是\textbf{可证明}——删边单调性等三条命题在 500 例上零违反，且给出可计算的上界，而黑盒只能给经验分布；
-（3）常用的保真度指标\textbf{会被常数预测器骗过}：黑盒的 Fidelity$^+$ 高达 0.978，但它在 60 张测试图上 100\% 输出负距离、与真值的相关系数是 $-0.10$。
-结论是：在最短路这类“算法已知”的问题上，白盒在三轴上同时占优，权衡曲线并不存在；可解释性与性能的取舍只在算法未知时才真正出现。
+题目把问题写成“可解释性 vs. 性能”。本文认为这个提法隐含了一个前提——\textbf{算法已知}。一旦知道算法，把它写进结构里就能同时赢下三个轴，权衡曲线并不存在；只有在算法未知时，取舍才真正出现。
+
+为了把这个判断做实，我们用两个任务做对照。
+
+\textbf{第一部分（算法已知）}：以单源最短路为载体。理论上证明 $k$ 层 min-sum 消息传递与同步 Bellman-Ford 的第 $k$ 轮逐点等价，并给出一个构造性深度下界；实验上设三档模型（未训练恒等 min-sum、2 参数 min-sum、约 $10^5$ 参数 mean-GNN），在准确率、鲁棒性、可解释性三轴上测量。结论是白盒三轴全胜，而且\textbf{训练是负收益}：未训练的恒等 min-sum 误差 $\sim10^{-6}$，训练 2 个参数后反而退化到 $0.024$；白盒的鲁棒性不是“更抗打”，而是三条\textbf{可证}命题（500 例零违反）。
+
+\textbf{第二部分（算法未知）}：以 Cora 节点分类为载体。这里没有白盒可对照，问题变成“能不能验证一个解释”。我们在真实数据上得到 GCN 0.8162 对 MLP 0.5539（参数量相同，差值只能归因于结构），FGA 攻击在 10\% 预算下打掉 11.9 个点、约为随机加边的 7 倍；但因为 Cora 上没有“正确的解释”，我们另外造了一个\textbf{带真值的合成环境}（SBM + 消融重要性），测得解释器达到 oracle 的 93.9\%（随机边仅 6\%）。一个反直觉的发现是：\textbf{攻击把准确率打掉 7.5 个点，解释却几乎逐条不变}（Jaccard 中位 1.000）——稳定，但不跟踪模型改变的主意。
+
+两个部分共享同一个方法论：\textbf{先问“这个指标会不会被骗”，再问“数值是多少”}。第一部分用常数预测器骗过了 Fidelity$^+$（0.978 的解释配上 $-0.10$ 的相关系数）；第二部分说明即使保真度与稳定性都合格，解释仍可能不跟踪模型当前的证据。
 \end{abstract}
 
-% \tableofcontents
+\tableofcontents
 \vspace{-1.2em}
 
-\input{sec01-intro}
-\input{sec02-white}
-\input{sec03-robust}
-\input{sec04-black}
-\input{sec05-setup}
-\input{sec06-results}
-\input{sec07-discussion}
-\input{sec08-conclusion}
+\input{m01-intro}
+\input{m02-white}
+\input{m03-robust}
+\input{m04-black}
+\input{m05-results-a}
+\input{m06-node-task}
+\input{m07-node-results}
+\input{m08-discussion}
+\input{m09-conclusion}
 
 {\small
 \bibliographystyle{plain}
@@ -67,7 +66,3 @@
 }
 
 \end{document}
-
-
-
-

@@ -1,17 +1,23 @@
 # 图算法中的「白盒」与「黑盒」：从 Dijkstra 到图神经网络
 
-《算法设计与分析》课程大作业（题目 2）。核心问题：**可解释性（Interpretability）vs. 性能（Performance）**——用同一个任务（学习型最短路）把两条路放进同一张表，从**准确率 / 鲁棒性 / 可解释性**三个轴量化比较。
+《算法设计与分析》课程大作业（题目 2）。核心问题：**可解释性（Interpretability）vs. 性能（Performance）**，在**准确率 / 鲁棒性 / 可解释性**三个轴上量化比较。
 
-报告：`report/main.pdf`（12 页）。所有数字都可由本仓库的脚本重跑得到。
+报告：`report/main.pdf`（**16 页**）。所有数字都可由本仓库的脚本重跑得到。
 
-## 一句话结论
+## 结论
 
-> Bellman-Ford 的第 $k$ 轮就是「至多 $k$ 条边的最短路」，而 $k$ 层消息传递的感受野恰好是 $k$ 跳——两者是同一个式子换了记号。
-> 在最短路这类**算法已知**的问题上，白盒在准确率、鲁棒性、可解释性上同时占优；**用有限深度的监督去「学」这个算子反而是负收益**：未训练的恒等 min-sum（即 Bellman-Ford）误差 $4.4\times10^{-7}$，训练 2 个参数后反而退化到 $0.024$。
+> **“可解释性 vs. 性能”的权衡曲线，只在算法未知时才真正出现。**
+
+报告分两部分，用两个任务把这个判断做实：
+
+**第一部分（算法已知，最短路）**：白盒三轴全胜，而且**训练是负收益**。$k$ 层 min-sum 消息传递与同步 Bellman-Ford 的第 $k$ 轮逐点等价；未训练的恒等 min-sum 误差 $\sim10^{-6}$，训练 2 个参数后反而退化到 $0.024$。白盒的鲁棒性不是“更抗打”，而是三条**可证**命题（500 例零违反）。
+
+**第二部分（算法未知，Cora 节点分类）**：没有白盒可对照，问题变成“能不能验证一个解释”。GCN 0.8162 对 MLP 0.5539（参数量相同），FGA 攻击比随机强 7 倍；由于真实数据没有“正确的解释”，另造带真值的 SBM 环境，测得解释器达到 oracle 的 93.9\%。一个反直觉的发现：**攻击把准确率打掉 7.5 个点，解释却几乎逐条不变**（Jaccard 中位 1.000）——稳定，但不跟踪模型改变的主意。
 
 ## 环境
 
-Python 3.12 + numpy + networkx + matplotlib + torch（**纯 CPU 即可**，无需 CUDA、无需 PyG），不下载任何外部数据集。
+Python 3.12 + numpy + networkx + matplotlib + torch（**纯 CPU**，无需 CUDA、无需 PyG）。
+第二部分额外需要 scipy，以及一份 Cora（脚本自动下载，约 570 KB，不入库）。
 
 ```bash
 python exp/check_env.py
@@ -20,13 +26,17 @@ python exp/check_env.py
 ## 一键复现
 
 ```bash
-python exp/run_all.py              # 全量，约 10 分钟（含 48 次训练）
-python exp/run_all.py --skip-train # 跳过训练，约 2 分钟（复用已有的 results/black.json）
+# 第一部分：最短路（15 步，约 12 分钟；含 48 次训练）
+python exp/run_all.py
+python exp/run_all.py --skip-train     # 跳过训练，约 2 分钟
+
+# 第二部分：节点分类（需先下载 Cora）
+python exp/fetch_cora.py
+python exp/run_all_b.py                # 约 4 分钟
+python exp/run_all_b.py --quick        # 只跑验收脚本，约 40 秒
 ```
 
-脚本会按依赖顺序跑完 15 个步骤，逐步打印判据，最后给出汇总表；任何一步失败，整条命令返回非 0。
-
-单独运行某一步也可以，例如 `python exp/run_interp.py`。所有图由固定种子生成，同一命令重跑得到相同数字（计时列除外）。
+两个脚本都按依赖顺序执行、逐步打印判据、最后给汇总表；任何一步失败，整条命令返回非 0。
 
 ## 目录
 
@@ -34,20 +44,24 @@ python exp/run_all.py --skip-train # 跳过训练，约 2 分钟（复用已有�
 src/                库代码（无副作用）
   algorithms.py       Dijkstra / 同步 Bellman-Ford / Floyd / 路径还原
   graphs.py           ER / BA / grid / SBM 四类可控图，固定 seed 逐字节复现
-  gnn.py              纯 torch 消息传递（sum / mean / min-sum 三种聚合）
-  train.py            监督学距离的训练管线（含断点保存/加载）
+  gnn.py              纯 torch 消息传递（sum / mean / min-sum）
+  train.py            监督学距离的训练管线
   explain.py          路径解码、梯度显著性、Fidelity / 精度 / 任务敏感度
-  timing.py           稳健计时（批内循环，避免亚毫秒噪声）
-  viz.py              统一绘图风格（中文字体）
+  cora.py             Planetoid 读取、边表去重、公开划分
+  node_gnn.py         2 层 GCN 与同参数量 MLP
+  explain_node.py     边掩码解释器 + 梯度显著性（子图归一化与训练一致）
+  attack.py           随机加边与 FGA（带符号梯度）
+  sbm.py              随机块模型（带真值的合成环境）
+  timing.py / viz.py  计时与绘图
 exp/                可执行脚本，每个对应报告里的一处结论
   check_*.py          验收脚本（跑不过就返回非 0）
   run_*.py            实验脚本（产出 results/）
-  analyze_black.py    非配对统计（Mann-Whitney + bootstrap）
-  run_all.py          一键复现
+  run_all.py          A 线一键复现
+  run_all_b.py        B 线一键复现
   _trained.py         按需训练并缓存 L1/L2 模型
-results/            json / csv / 图（全部可重跑）
-report/             LaTeX 源文件与 PDF
-docs/               STATE.md（进度与已知问题）、DECISIONS.md（22 条决策记录）
+results/            json / csv / 图 / 模型缓存（全部可重跑）
+report/             LaTeX 源（main.tex + m01–m09）与 16 页 PDF
+docs/               STATE.md（进度与已知问题）、DECISIONS.md（决策记录）
 ```
 
 ## 脚本 ↔ 报告章节
@@ -59,70 +73,41 @@ docs/               STATE.md（进度与已知问题）、DECISIONS.md（22 条�
 | §3 鲁棒性命题 | `run_white_robust.py` | `robust_white.json`（500 例，0 违反） |
 | §4 消息传递 = BF | `check_gnn.py` | 逐层逐点一致（float32 容差 1e-5） |
 | §4 深度下界 | `run_depth.py` | `depth_bound.json`、`fig/depth_bound.png` |
-| §6 准确率 | `run_black.py` + `run_accuracy.py` | `black.json`、`accuracy.json` |
-| §6 训练偏差 | `analyze_black.py`、`run_failures.py` | `black_stats.json`、`fig/fail_g_bias.png` |
-| §6 鲁棒性 | `run_robust.py` | `robust.json`、`fig/robust.png` |
-| §6 可解释性 | `run_interp.py` | `interp.json`、`fig/interp.png` |
-| — 判据是否有效 | `check_negative_controls.py` | 9 个桩实现必须让对应脚本失败 |
+| §5 准确率 | `run_black.py` + `run_accuracy.py` | `black.json`、`accuracy.json` |
+| §5 训练偏差 | `analyze_black.py`、`run_failures.py` | `black_stats.json`、`fig/fail_g_bias.png` |
+| §5 鲁棒性 | `run_robust.py` | `robust.json`、`fig/robust.png` |
+| §5 可解释性 | `run_interp.py` | `interp.json`、`fig/interp.png` |
+| §6 数据与模型 | `check_cora.py`、`check_node_gnn.py` | 形状/划分/同配率体检、GCN 手算对照 |
+| §6 分类 | `run_node_class.py`、`check_node_repro.py` | `node_class.json`（GCN 0.8162 / MLP 0.5539） |
+| §7 真值检验 | `run_node_planted.py` | `node_planted.json`、`fig/b_explain.png` |
+| §7 Cora 解释 | `run_node_explain.py` | `node_explain.json` |
+| §7 攻击 | `run_node_attack.py`、`run_node_attack_explain.py` | `node_attack*.json` |
+| — 判据是否有效 | `check_negative_controls.py`（9 条）、`check_b_negative_controls.py`（3 条） | 桩实现必须让对应脚本失败 |
 
 ## 复现性与负控制
 
-- 每个验收脚本都配有「桩实现必须失败」的负控制：把 Dijkstra 换成恒返回 0、把解释换成空集等，脚本必须返回非 0。当前 9/9 正确失败。
+- 每个验收脚本都配有「桩实现必须失败」的负控制：把 Dijkstra 换成恒返回 0、把解释换成空集、用 MLP 顶替 GCN、用 bottom-$k$ 顶替 top-$k$。当前 **12/12 正确失败**。
 - 负控制运行前会备份 `results/`、结束后恢复，避免桩实现把真实结果覆盖成假数据。
-- 训练固定为单线程（`torch.set_num_threads(1)`）：多线程下 `index_add_` / `scatter_reduce_` 的归约顺序不固定，浮点加法不满足结合律，同一个种子跨进程会跑出不同结果（实测某 seed 两次得到 MAE 2.49 与 2.20）。单线程后同种子逐位可复现，代价是训练慢一些。
+- 训练固定单线程（`torch.set_num_threads(1)`）：多线程下 `index_add_` / `scatter_reduce_` 的归约顺序不固定，浮点加法不满足结合律，同一个种子跨进程会跑出不同结果（实测某 seed 两次得到 MAE 2.49 与 2.20）。单线程后同种子逐位可复现。
 - 统计用 Mann-Whitney U（非配对）+ bootstrap 95% CI，不用配对检验（8 个 seed 是 8 个不同模型，没有自然配对关系）。
 
 ## 已知边界
 
-报告的 §7.3 逐条列出了结论的边界，其中最重要的两条：
+报告的 §8.4 逐条列出，最重要的四条：
 
-1. **黑盒基线没有调到最好**：8 个种子里 6 个塌缩成常数预测。因此本文的强结论只到「未调好的 mean-pool 基线做不到」，不是「GNN 学不会最短路」。
-2. **迭代预算不对称**：结构臂推理跑 128 轮（迭代到收敛），黑盒只有 8 层。这不是黑盒的固有属性，是我们的设计选择；同深度对照见报告表 6，SBM 上结构臂反而更差。
+1. **A 线黑盒基线没有调到最好**：8 个种子里 6 个塌缩成常数预测。强结论只到「未调好的 mean-pool 基线做不到」，不是「GNN 学不会最短路」；Nerem 等人（arXiv:2503.19173）已证明带合适正则的 GNN 能精确实现 Bellman-Ford。
+2. **迭代预算不对称**：结构臂推理跑 128 轮，黑盒只有 8 层。同深度对照见报告表 4：SBM 上结构臂反而更差（35.38 对 28.76）。
+3. **B 线的“真值”来自合成图**：SBM 的社区结构与真实图差距很大，有真值的代价是不真实。
+4. **B 线预算单一**：只测了 ε=5% 一个攻击预算与 k=6 一个解释预算，没有敏感性曲线。
+
+## 复现踩过的坑（写在这里，免得后人重蹈）
+
+- A 线：`collate` 最初只建单向边，消息传递死路；玩具例子恰好所有边由小号指向大号，骗过了测试。
+- B 线：子图归一化算子的三个细节（度数只累加一次、自环贡献 $d^2$、边表双向）写错两处，导致掩码塌成常数、解释完全失效；修复前所有解释结论作废。
+- B 线：FGA 若对梯度取绝对值，会同时选中「最伤害」与「最补」的边，净效果反而提升准确率（0.808 → 0.875）。
 
 ## 课程信息
 
 算法设计与分析（JBK2634001，宋锐），2026 秋 第 9–16 周，2.5 学分。
 
-## 补充实验（B 线）：节点分类 + 可解释性 + 攻击
-
-主报告的结论有个前提：**算法已知**。节点分类没有白盒算法，正好拿来检验"没有白盒时，解释还可不可信"。
-完整内容见 `report/appendixB.tex`（可单独编译：`cd report && tectonic appB-main.tex`）。
-
-### 快速开始
-
-```bash
-python exp/fetch_cora.py              # 下载 8 个 Planetoid 文件到 data/cora/（约 570 KB，不入库）
-python exp/check_cora.py              # 数据体检（形状/划分/同配率）
-python exp/check_node_gnn.py          # GCN 与手算对照 + 三条回归断言
-python exp/run_node_class.py          # 训练 GCN 与 MLP（8 种子）
-python exp/check_node_repro.py        # 同种子跨进程复现 + 与 JSON 对账
-python exp/run_node_planted.py        # SBM 上的解释真值检验（消融）
-python exp/run_node_explain.py        # Cora 上的解释与跨模型稳定性
-python exp/run_node_attack.py         # 随机加边 vs FGA
-python exp/run_node_attack_explain.py # 攻击前后的解释稳定性
-python exp/check_b_negative_controls.py  # 三条负控制
-python exp/plot_b.py                  # 结果图
-```
-
-### 关键数字
-
-| 项 | 结果 |
-|---|---|
-| GCN（公开划分） | **0.8162**（原论文 81.5%） |
-| MLP（无结构对照） | 0.5539 |
-| 随机加边 10% / FGA 10% | −0.017 / **−0.119** |
-| 解释边 vs 随机边（SBM 消融真值） | Δ **0.0673 vs 0.0044**，Wilcoxon p=5e-11 |
-| oracle 效率 | 中位 **0.939**（41/44 个节点可算） |
-| 无法判定 | 1/45（掩码并列） |
-| Cora 上的掩码解释器 | **88% 可判定**（105/120） |
-| Cora 充分性 / 必要性 | 1.31 vs 随机 1.21 / 删解释边 −0.123 vs 删随机边 −0.019 |
-| 攻击后的解释 | Jaccard **1.000**——解释对 FGA 完全不敏感 |
-| Cora 上的掩码解释器 | **0/120 可判定**——候选上百条时失效 |
-| Cora 上的 fidelity | 1.211 vs 随机 1.208，**无判别力** |
-
-### 已知限制
-
-- 解释器实现踩过一个致命 bug（归一化算子度数重复累加、自环写成 d 而非 d²、只传单方向边表），已修；修前所有解释结论作废
-- 仍有 1/45 个 SBM 节点排不出序；跳过节点的候选池与度数分布未落盘，是否有偏无法审计
-- 只测了 ε=5% 一个攻击预算与 k=6 一个解释预算，未做敏感性曲线
-- 跨模型 Jaccard 0.714 与"攻击前后 Jaccard 1.000"一并说明：解释稳定，但未必跟踪模型当前的证据
+> 说明：`report/b-main.*` 与 `appendixB.tex` 是 B 线的独立草稿，已被合并版 `report/main.pdf` 取代，保留作过程记录。
