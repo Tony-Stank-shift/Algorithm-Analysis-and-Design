@@ -1,0 +1,81 @@
+\section{黑盒：消息传递与它的两个上限}\label{sec:black}
+
+\subsection{消息传递}
+
+一层消息传递写作
+\begin{equation}
+h_v^{(k)}=\varphi\Bigl(h_v^{(k-1)},\ \mathrm{AGG}_{u\in N(v)}\ \psi\bigl(h_u^{(k-1)},h_v^{(k-1)},w(u,v)\bigr)\Bigr),
+\label{eq:mp}
+\end{equation}
+其中 $\psi$ 是消息函数、$\mathrm{AGG}$ 是聚合算子、$\varphi$ 是更新函数。
+GCN 取 $\mathrm{AGG}$ 为加权平均~\cite{kipf2017gcn}，GraphSAGE 取拼接后求平均~\cite{hamilton2017graphsage}，GAT 取注意力加权和~\cite{velickovic2018gat}。
+它们的共同点是：\emph{聚合是可微的、光滑的}。
+
+\subsection{桥：min-sum 就是 Bellman-Ford}
+
+\begin{theorem}[等价性]\label{thm:equiv}
+在式~\eqref{eq:mp} 中取 $\psi(h_u,h_v,w)=h_u+w(u,v)$、$\mathrm{AGG}=\min$、$\varphi(a,b)=\min(a,b)$，
+并令 $h^{(0)}_s=0$、$h^{(0)}_v=+\infty\ (v\ne s)$，则对一切 $k$ 有 $h^{(k)}_v=d^{(k)}(v)$，
+其中 $d^{(k)}$ 由式~\eqref{eq:bf} 给出。
+\end{theorem}
+\begin{proof}
+把上述取值代入式~\eqref{eq:mp}，得到
+$h_v^{(k)}=\min\bigl\{h_v^{(k-1)},\min_{(u,v)\in E}[h_u^{(k-1)}+w(u,v)]\bigr\}$，
+与式~\eqref{eq:bf} 逐字相同；由命题~\ref{prop:rounds} 即得。
+\end{proof}
+
+定理~\ref{thm:equiv} 说明：\textbf{Bellman-Ford 是一个特定的 GNN}——min-sum 聚合、$k$ 层、初值 $0/\infty$。
+这条观察与 Neural Bellman-Ford~\cite{zhu2021neuralbf} 把最短路写成广义 Bellman-Ford 的消息传递框架、以及“GNN 是动态规划器”~\cite{dudzik2022dp} 的工作是一致的。
+反过来，一个用 mean 聚合的 GNN 学到的是“平均”，它没有 $\min$ 的“选择”语义，因此即使深度足够，也未必能表示这个算子。
+
+实践上要注意两点。其一，模型在单精度下工作，等价性只在数值容差内成立：我们用随机权重的 300 张图实测，$\max|\Delta|=4.15\times10^{-6}$，所以本文的措辞是“逐点一致（$10^{-5}$ 容差）”，而不是“逐位相等”。
+其二，构造图的记录里每条无向边只存一次，做消息传递时必须\textbf{双向建边}，否则消息会单向流动——我们在实现初期就踩过这个坑，而当时的玩具例子恰好所有边都从小号指向大号，所以骗过了测试。
+
+\subsection{上限一：深度}\label{sec:depth}
+
+\begin{proposition}[深度下界]\label{prop:depth}
+存在两张图 $G_1,G_2$ 与节点 $s,t$，使得它们在 $t$ 的 $L$ 跳计算图内同构\textbf{且该计算图上的节点特征逐点相同}，但 $d_{G_1}(s,t)\ne d_{G_2}(s,t)$。
+因此任何 $L$ 层消息传递模型（节点特征只依赖该点自身、聚合只沿计算图内的边进行）在 $G_1,G_2$ 上对 $t$ 的输出相同，从而至少有一个是错的。
+\end{proposition}
+\begin{proof}[构造]
+取 $G_1$ 为路 $s$-$d$-$c$-$b$-$a$-$t$（5 条边），$G_2$ 为 $s$-$c$-$b$-$a$-$t$（4 条边），两图共用节点编号。
+对 $L\le3$，$t$ 的 $L$ 跳计算图在两图中完全相同：$L=1$ 为 $\{t,a\}$，$L=2$ 为 $\{t,a,b\}$，$L=3$ 为 $\{t,a,b,c\}$，边都是对应的前缀；
+且两图在这些节点上的初始特征一致（源点在 $s$，不在计算图内；其余节点的输入特征相同）。
+而 $d_{G_1}(s,t)=5$、$d_{G_2}(s,t)=4$。
+由于 $L$ 层的输出只依赖这个计算图与其中的特征（对层数归纳即可），两图在 $t$ 处输出相同，故至少一个与真值不符。
+\end{proof}
+
+这里“特征逐点相同”这个前提不能省：若允许两图在球内放置不同的节点特征，图同构可以把携带不同特征的节点对应起来，“输出相同”就不成立了。
+
+实验用参数已取到最优的恒等 min-sum（即定理~\ref{thm:equiv} 的模型），结果见表~\ref{tab:depth}：
+$L\le3$ 时两图输出\textbf{完全相同}（都报“不可达”），而真值分别是 5 和 4；$L=4$ 时 $G_2$ 已能算对而 $G_1$ 不能；$L=5$ 时两图都对。
+关键在于这里用的是\emph{理想参数}——所以错误的原因只能是深度，不是训练不充分。
+
+\begin{table}[H]
+\centering
+\caption{深度下界：$L$ 层 min-sum 在两张计算图同构的图上的输出}
+\label{tab:depth}
+\begin{tabular}{cccccc}
+\toprule
+$L$ & 计算图是否同构 & $G_1$ 输出 & $G_2$ 输出 & 真值 $(G_1,G_2)$ & 是否必错 \\
+\midrule
+1 & 是 & 不可达 & 不可达 & $(5,4)$ & 是 \\
+2 & 是 & 不可达 & 不可达 & $(5,4)$ & 是 \\
+3 & 是 & 不可达 & 不可达 & $(5,4)$ & 是 \\
+4 & 否 & 不可达 & 4.000 & $(5,4)$ & 至少一个 \\
+5 & 否 & 5.000 & 4.000 & $(5,4)$ & 否 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{上限二：表达能力}
+
+即使深度足够，GNN 的表达能力也有一个经典上界：消息传递模型区分图的能力不超过 1-WL 测试~\cite{xu2019gin}。
+换言之，存在两张 1-WL 无法区分的图，任何层的消息传递都会给它们相同的表示。
+本文没有在这个方向上做实验，但它与命题~\ref{prop:depth} 一起说明了同一件事：\textbf{黑盒的误差不是“训练不够”，而是结构上的天花板}。
+
+\subsection{那么，学习还有用吗}
+
+定理~\ref{thm:equiv} 说明精确算法已经在假设类里（取 $g(w)=w$ 即可），于是自然的问题是：训练能不能把它找出来？
+第~\ref{sec:results}~节的答案是\textbf{不能，而且会更糟}——训练把 2 个参数推到了距恒等 0.15\% 的地方，精确解反而被推开了。
+这个结果比“学得更好”更有意思，我们留到实验部分展开。

@@ -1,0 +1,73 @@
+﻿\documentclass[a4paper,10pt]{article}
+
+\usepackage[UTF8]{ctex}
+\setCJKmainfont{SimSun}[BoldFont=SimHei]
+\setCJKsansfont{SimHei}
+\setCJKmonofont{SimSun}
+
+\usepackage[margin=2.0cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue]{hyperref}
+
+\graphicspath{{../results/fig/}}
+\captionsetup{font=small}
+\setlist{nosep,leftmargin=1.6em}
+
+\newtheorem{theorem}{定理}
+\newtheorem{proposition}{命题}
+\newtheorem{corollary}{推论}
+\newtheorem{definition}{定义}
+\renewcommand{\proofname}{证明}
+
+\title{\bfseries 图算法中的“白盒”与“黑盒”：从 Dijkstra 到图神经网络\\[2pt]
+\large ——以最短路为载体的三轴实证研究}
+\author{黄锦添\quad 25121605\\ 上海大学未来技术学院\quad 人工智能}
+\date{2026 年 12 月}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+本文不做“经典算法综述 + 图神经网络综述”的拼接，而是把两类方法放进\emph{同一个任务}——单源最短路——用同一批图、同一套指标做对照。
+理论上，我们证明 $k$ 层消息传递在 min-sum 聚合下与同步 Bellman-Ford 的第 $k$ 轮逐点等价，并由此给出一个构造性反例说明“深度不足”是结构性错误而非训练不足。
+实验上，我们设置三档模型：未训练的恒等 min-sum（即 Bellman-Ford 本身）、只用 2 个参数学习边权变换的 min-sum、以及约 $1.0\times10^5$ 参数的 mean 聚合 GNN，
+在准确率、鲁棒性、可解释性三个轴上测量。主要发现有三条：
+（1）\textbf{训练是负收益}——恒等 min-sum 跑满 128 轮的平均绝对误差为 $4.4\times10^{-7}$，训练后的 2 参数模型反而退化到 $0.024$，
+说明在这个任务上结构先验已经包含了完整算法，用有限深度的监督去“学”它只会把精确解推开；
+（2）白盒的鲁棒性不是“更抗打”，而是\textbf{可证明}——删边单调性等三条命题在 500 例上零违反，且给出可计算的上界，而黑盒只能给经验分布；
+（3）常用的保真度指标\textbf{会被常数预测器骗过}：黑盒的 Fidelity$^+$ 高达 0.978，但它在 60 张测试图上 100\% 输出负距离、与真值的相关系数是 $-0.10$。
+结论是：在最短路这类“算法已知”的问题上，白盒在三轴上同时占优，权衡曲线并不存在；可解释性与性能的取舍只在算法未知时才真正出现。
+\end{abstract}
+
+% \tableofcontents
+\vspace{-1.2em}
+
+\input{sec01-intro}
+\input{sec02-white}
+\input{sec03-robust}
+\input{sec04-black}
+\input{sec05-setup}
+\input{sec06-results}
+\input{sec07-discussion}
+\input{sec08-conclusion}
+
+{\small
+\bibliographystyle{plain}
+\bibliography{refs}
+}
+
+\end{document}
+
+
+
+

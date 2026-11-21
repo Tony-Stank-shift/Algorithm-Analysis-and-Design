@@ -1,0 +1,67 @@
+\section{白盒的“鲁棒性”是可证明性}\label{sec:robust}
+
+“鲁棒”这个词在黑盒语境里通常指“输入被扰动后性能掉得少”。这个定义对白盒是不合适的：白盒在扰动之后\emph{重新算}，误差永远是零，那它岂不是“完美鲁棒”？
+真正有信息量的问法是：\textbf{答案会怎么变，以及这个变化能不能被算出来}。本节把这件事写成三条可证命题，并在 500 个随机实例上逐例验证。
+
+\subsection{三条命题}
+
+设 $G'=(V,E',w)$ 是 $G$ 的子图（$E'\subseteq E$）。
+
+\begin{proposition}[删边单调性]\label{prop:mono}
+若 $E'\subseteq E$，则对任意 $s,t$ 有 $d_{G'}(s,t)\ge d_G(s,t)$。
+\end{proposition}
+\begin{proof}
+$G'$ 中的任意 $s$--$t$ 路也是 $G$ 中的 $s$--$t$ 路，故 $G$ 上的最短路不会更长。
+\end{proof}
+
+\begin{proposition}[非树边不变性]\label{prop:nontree}
+设 $T$ 是以 $s$ 为根的最短路树。若被删的边 $e\notin T$，则对所有 $v$ 有 $\mathrm{dist}_{G'}(s,v)=\mathrm{dist}_G(s,v)$。
+\end{proposition}
+\begin{proof}
+树上的每条 $s$--$v$ 路都避开了 $e$，因此在 $G'$ 中仍然存在，给出 $\mathrm{dist}_{G'}(s,v)\le \mathrm{dist}_G(s,v)$；结合命题~\ref{prop:mono} 得等号。
+\end{proof}
+
+\begin{proposition}[单边删除的可计算上界]\label{prop:bound}
+设 $e=(u,v)$ 位于某条最短路 $P$ 上，$G'=G-e$。则
+\begin{equation}
+d_{G'}(s,t)\ \le\ d_G(s,u)+d_{G'}(u,v)+d_G(v,t).
+\label{eq:bound}
+\end{equation}
+\end{proposition}
+\begin{proof}
+取 $P$ 上 $s\to u$ 的前缀（不含 $e$）、$G'$ 中 $u\to v$ 的最短路、以及 $P$ 上 $v\to t$ 的后缀（不含 $e$），三段拼成 $G'$ 中的一条 $s$--$t$ 走道，其长度即右端。
+\end{proof}
+
+命题~\ref{prop:bound} 的意义在于它是一个\textbf{可计算}的量：右端的三项里，$d_G(s,u)$ 与 $d_G(v,t)$ 在原图上算一次即可，$d_{G'}(u,v)$ 只需在删边后的图上再跑一次 Dijkstra。
+也就是说，白盒不仅能保证答案“不会变坏”，还能\emph{说出它会变成什么范围}。这正是黑盒做不到的。
+
+\subsection{500 例逐例验证}
+
+我们在 500 个随机 ER 图（$n\in[10,30]$，平均度 3.2）上逐例检验三条命题。为了让断言不是“恒真式”，每条距离在比较前都与 \texttt{networkx} 独立对拍（0 处不符）。
+
+\begin{table}[H]
+\centering
+\caption{三条命题的逐例验证（500 个随机实例）}
+\label{tab:robust}
+\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lccc}
+\toprule
+命题 & 有效例数 & 违反次数 & 说明 \\
+\midrule
+删边单调性 & 500 & 0 & 随机删一条边 \\
+非树边不变 & 500 & 0 & 删非最短路树边 \\
+单边删除上界 & 398 & 0 & 另 102 例平凡（上界为 $\infty$） \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+上界的“余量”（右端减左端）中位数为 6.23，说明真实绕路通常比上界小得多——上界是可用的，但不紧。
+另有 102 例（20.4\%）因为删边后图断开而使右端为 $\infty$，这类情形不提供信息，本文单列为“平凡成立”，不计入余量统计。
+这一处理是必要的：若把平凡例与有限例混在一起报“100\% 成立”，等于让两成的空话冒充有效检验。
+
+\subsection{与黑盒的对照}
+
+黑盒没有对应的命题。它的“鲁棒性”只能通过在扰动分布上重复采样来估计，得到的是一个\emph{经验}结论，既没有上界也没有下界。
+第~\ref{sec:results}~节的实验会显示一个更微妙的现象：黑盒的误差对扰动\emph{不敏感}，但这并不是因为它稳健，而是因为它的误差已经接近常数预测器的水平——扰动改变不了它。
+把“不敏感”读成“稳健”，是这类比较里最常见的误读。
