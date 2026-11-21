@@ -15,7 +15,7 @@ Dijkstra 维护一个“已确定”集合 $S$，每轮取出 $d$ 值最小的�
 Dijkstra 与 Bellman-Ford 的原始文献见~\cite{dijkstra1959,bellman1958}，标准的正确性证明可参考~\cite{cormen2009clrs}。
 
 用二叉堆实现时，Dijkstra 的复杂度是 $O((n+m)\log n)$；在 $m\propto n$ 的稀疏图上即 $O(n\log n)$。
-实测（图~\ref{fig:complexity}）在 $n=800$ 时为 4.1\,ms。
+实测（图~\ref{fig:complexity}）在 $n=800$ 时为 7.4\,ms（同规模 Bellman-Ford 1.70\,s）。
 
 \subsection{Bellman-Ford 的 DP 形式}\label{sec:bf}
 
@@ -41,7 +41,7 @@ d^{(k+1)}(v)=\min\Bigl\{d^{(k)}(v),\ \min_{(u,v)\in E}\bigl[d^{(k)}(u)+w(u,v)\bi
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.46\textwidth]{complexity.png}
-\caption{三类精确算法的实测复杂度（ER 图，平均度 6，每个规模取 3 张图的中位数）。双对数拟合斜率：Dijkstra 1.07（理论 $n\log n$ 在该区间约 1.18）、Bellman-Ford 2.01（理论 $O(nm)$ 即 2）、Floyd 3.08（理论 $O(n^3)$ 即 3）。}
+\caption{三类精确算法的实测复杂度（ER 图，平均度 6，每个规模取 3 张图的中位数）。双对数拟合斜率：Dijkstra 1.09（理论 $n\log n$ 在该区间约 1.18）、Bellman-Ford 2.12（理论 $O(nm)$ 即 2）、Floyd 2.96（理论 $O(n^3)$ 即 3）。计时随机器负载波动，此处取提交的 \texttt{results/complexity.csv}。}
 \label{fig:complexity}
 \end{figure}
 
@@ -55,8 +55,9 @@ d^{(k+1)}(v)=\min\Bigl\{d^{(k)}(v),\ \min_{(u,v)\in E}\bigl[d^{(k)}(u)+w(u,v)\bi
 
 \subsection{复杂度实测的诚实说明}
 
-图~\ref{fig:complexity} 的拟合斜率与渐近阶同量级但不完全吻合：Dijkstra 1.07 低于理论值 1.18，而 Bellman-Ford 2.01、Floyd 3.08 略高于 2 与 3。
+图~\ref{fig:complexity} 的拟合斜率与渐近阶同量级但不完全吻合：Dijkstra 1.09 低于理论值 1.18，而 Bellman-Ford 2.12 略高于 2，Floyd 2.96 略低于 3。
 原因不是实现错了，而是规模不够大：每次调用的固定开销（入参校验、堆分配、数组预分配）在 $n\le800$ 时占比可观，拟合出来的斜率测的是常数项而不是阶。
-我们用“最大两点之间的局部指数”做了补充：Dijkstra 1.12、Bellman-Ford 1.85、Floyd 3.64。
+我们用“最大两点之间的局部指数”做了补充：Dijkstra 1.10、Bellman-Ford 2.05、Floyd 3.57。
 报告里同时给出拟合斜率、局部指数和原始时间表，读者可以自己判断。
+
 
